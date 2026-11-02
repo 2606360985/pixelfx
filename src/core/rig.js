@@ -34,10 +34,24 @@ const tv = (M, v) => [M[0] * v[0] + M[3] * v[1] + M[6] * v[2], M[1] * v[0] + M[4
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
 // ---- the body's measurements, in pixels
-const M = {
+const BASE_M = {
   pelvis: 19.7, spine1: 2.8, spine2: 4.6, shoulderUp: 2.5, shoulderOut: 5.9, neckUp: 4.0, headUp: 3.1,
   hipDown: 1.1, hipOut: 2.8, thigh: 8.6, shin: 8.3, upper: 7.6, fore: 7.4, turn: 36 * DEG,
 };
+let M = BASE_M, bodyThickness = 1;
+// Profiles are scoped to a synchronous render/solve; legacy callers keep the exact stock rig.
+function withProfile(profile, fn) {
+  if (!profile) return fn();
+  const previous = [M, bodyThickness, REST_FRAMES];
+  M = { ...BASE_M, ...profile.metrics };
+  bodyThickness = profile.thickness ?? 1;
+  try {
+    REST_FRAMES = solve({}).B;
+    return fn();
+  } finally {
+    [M, bodyThickness, REST_FRAMES] = previous;
+  }
+}
 /** Standing easy, in screen terms: hands and feet are where they should end up, y negative is up. */
 export const STAND = { lean: 0, crouch: 0, yaw: 0, fx: -3, fy: -15, bx: 5, by: -15, ffx: -2, ffy: -4, fbx: 3, fby: -4 };
 
@@ -157,6 +171,7 @@ function plot(i, z, tone, part, mat, wx, wy, color) {
   Col[i] = color;
 }
 function sphere(c, r, part, mat) {
+  r *= bodyThickness;
   const x0 = Math.floor(c[0] - r), x1 = Math.ceil(c[0] + r), y0 = Math.floor(c[1] - r), y1 = Math.ceil(c[1] + r);
   for (let wy = y0; wy <= y1; wy++)
     for (let wx = x0; wx <= x1; wx++) {
@@ -175,6 +190,7 @@ function sweep(a, b, ra, rb, part, mat, bulge = 0) {
 }
 // an ellipsoid with radii r along the axes of frame R, seen along z
 function ellipsoid(c, R, r, part, mat) {
+  r = [r[0] * bodyThickness, r[1], r[2] * bodyThickness];
   const big = Math.max(r[0], r[1], r[2]), x0 = Math.floor(c[0] - big), x1 = Math.ceil(c[0] + big), y0 = Math.floor(c[1] - big), y1 = Math.ceil(c[1] + big);
   const Rt = [R[0], R[3], R[6], R[1], R[4], R[7], R[2], R[5], R[8]], D = [1 / (r[0] * r[0]), 1 / (r[1] * r[1]), 1 / (r[2] * r[2])];
   // A = R diag(D) R^T
@@ -402,7 +418,7 @@ function finish(S, restFrames) {
   // the outline, and everything into a small list of pixels
   const list = touched.slice(), ring = new Map();
   for (const i of list) for (const d of [-1, 1, -BW, BW]) { const j = i + d; if (Part[j] === 0 && !ring.has(j)) ring.set(j, i); }
-  const n = list.length + ring.size, out = { n, xs: new Int16Array(n), ys: new Int16Array(n), color: new Uint32Array(n), src: new Int16Array(n), ink: new Uint8Array(n), x0: 0, y0: 0, x1: 0, y1: 0 };
+  const n = list.length + ring.size, out = { n, xs: new Int16Array(n), ys: new Int16Array(n), color: new Uint32Array(n), src: new Int16Array(n), ink: new Uint8Array(n), part: new Uint8Array(n), x0: 0, y0: 0, x1: 0, y1: 0 };
   const srcFor = (i) => {
     const f = Fr[i];
     if (f < 0 || !restFrames) return -1;
@@ -413,7 +429,7 @@ function finish(S, restFrames) {
   let k = 0, x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   const push = (i, c, s, isInk) => {
     const x = (i % BW) - OX, y = ((i / BW) | 0) - OY;
-    out.xs[k] = x; out.ys[k] = y; out.color[k] = c; out.src[k] = s; out.ink[k] = isInk ? 1 : 0;
+    out.xs[k] = x; out.ys[k] = y; out.color[k] = c; out.src[k] = s; out.ink[k] = isInk ? 1 : 0; out.part[k] = Part[i];
     if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
     k++;
   };
@@ -467,17 +483,17 @@ const keyOf = (p) => {
   return s;
 };
 /** How far short of where the pose wants them the hands fall, in px: arms don't stretch. */
-export function shortfall(pose) {
+function shortfallStock(pose) {
   const S = solve(pose), q = S.q, near = len(sub(S.armN.end, [q.fx, -q.fy, S.armN.end[2]])), far = q.two ? 0 : len(sub(S.armF.end, [q.bx, -q.by, S.armF.end[2]]));
   return Math.max(near, far);
 }
 /** The pixels of a pose: { n, xs, ys, color, src, ink, x0, y0, x1, y1 }, in local space with the feet at (0, 0). */
-export function posed(pose) {
-  const key = keyOf(pose);
+export function posed(pose, profile) {
+  const key = (profile ? JSON.stringify(profile) : "") + keyOf(pose);
   let r = CACHE.get(key);
   if (!r) {
     if (CACHE.size > 6000) CACHE.clear();
-    CACHE.set(key, (r = render(pose)));
+    CACHE.set(key, (r = withProfile(profile, () => render(pose))));
   }
   return r;
 }
@@ -487,7 +503,7 @@ export function posed(pose) {
  * figure turned by its yaw. { joints: { name: [x, y, z] }, bones: [[from, to], ...], handles: [name, ...] }: the handles
  * are what a pose moves (hands and feet); everything else is solved from them.
  */
-export function skeleton(pose) {
+function skeletonStock(pose) {
   const S = solve(pose), q = S.q, whole = (q.yaw ?? 0) + (q.face === -1 ? Math.PI : 0);
   if (whole) turnAll(S, whole);
   const { B, armN, armF, legN, legF, sN, sF, hipN, hipF } = S, at = (f, v) => add(f.t, mv(f.R, v));
@@ -501,7 +517,7 @@ export function skeleton(pose) {
   return { joints, bones, handles: ["handN", "handF", "ankleN", "ankleF"] };
 }
 /** The figure taken apart: each part drawn alone, with its own outline, and where its middle is. For exploded views. */
-export function posedParts(pose) {
+function posedPartsStock(pose) {
   const out = [];
   for (const [name, part] of Object.entries(PART)) {
     onlyPart = part;
@@ -514,3 +530,8 @@ export function posedParts(pose) {
   }
   return out;
 }
+
+/** Optional { metrics: partial body measurements, thickness } for game-specific silhouettes. */
+export const shortfall = (pose, profile) => withProfile(profile, () => shortfallStock(pose));
+export const skeleton = (pose, profile) => withProfile(profile, () => skeletonStock(pose));
+export const posedParts = (pose, profile) => withProfile(profile, () => posedPartsStock(pose));

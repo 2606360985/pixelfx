@@ -15,7 +15,9 @@
   "scripts": {
     "render": "node tools/render.mjs",
     "check": "node tools/check.mjs",
-    "gallery": "node tools/serve.mjs"
+    "gallery": "node tools/serve.mjs",
+    "game": "node tools/serve.mjs --game",
+    "test:game": "node --test game/tests/*.test.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.10"

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#101b22"><title>街头双响 · STREET DUET</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="masthead"><a href="./" class="brand"><span class="brand-mark">双</span> STREET DUET <span class="edition">街头双响</span></a><div class="build"><span class="status-dot"></span> PIXELFX ORIGINAL <span class="edition">/ 夜 市 功 夫 录</span></div></header>
+<main>
+  <div class="stage-top"><span><b>01</b> 夜市 · 今晚不打烊</span><span id="device">KEYBOARD READY</span></div>
+  <section id="viewport" aria-label="街头双响游戏画面">
+    <canvas id="game" width="480" height="270" tabindex="0" aria-label="游戏。方向键移动，J攻击，K重击，1到3技能，U终极技，空格跳跃，L闪避，Q切换角色。"></canvas>
+    <div class="vignette" aria-hidden="true"></div>
+    <div id="hud" hidden>
+      <div class="hero-hud" id="hero0"><div class="hero-heading"><span><b>凌风</b><small>疾腿 / SWIFT</small></span><em>PLAYER</em></div><div class="hp"><i></i></div><div class="energy"><i></i></div><div class="hero-numbers"></div></div>
+      <div class="hero-hud second" id="hero1"><div class="hero-heading"><span><b>磐石</b><small>重拳 / STONE</small></span><em>AI</em></div><div class="hp"><i></i></div><div class="energy"><i></i></div><div class="hero-numbers"></div></div>
+      <div class="team-meter"><span>双响默契 <b id="team-number">0%</b></span><div><i id="team-fill"></i></div></div>
+      <div id="boss-hud" hidden><span>招牌王</span><div><i></i></div></div>
+      <div class="bottom-hud"><span id="zone-label">街口</span><span id="ai-label">搭档：熟练</span><button id="pause-button" aria-label="暂停游戏">Ⅱ 暂停</button></div>
+    </div>
+    <div class="screen title-screen" id="title-screen">
+      <div class="poster-grain" aria-hidden="true"></div>
+      <div class="title-copy"><p class="eyebrow">双响出品 / 街机动作</p><div class="ticket">一条老街 · 两位狠角色</div><h1>街头<br><span>双响</span></h1><p class="english-title">STREET<br>DUET<span>VOL. 01 / 夜市篇</span></p><p class="tagline">今晚，这条街我们罩。</p><button class="primary" id="start">搭档就位，开打 <span>ENTER ↗</span></button><div class="title-actions"><button id="title-moves">操作与招式 ↗</button><a href="../gallery/" target="_blank" rel="noopener">特效画廊 ↗</a></div></div>
+      <div class="duo-poster"><div class="poster-sun" aria-hidden="true"></div><div class="poster-stamp">夜市<br>不打烊</div><div class="duo-art"><canvas id="portrait0" width="100" height="150"></canvas><canvas id="portrait1" width="100" height="150"></canvas></div><div class="duo-billing"><span id="billing0">凌风</span><i>×</i><span id="billing1">磐石</span></div><p>一人掌控 · 双人出击</p></div>
+      <div class="casting"><div class="cast-top"><span>选你的街头搭档</span><span>CAST / 04</span></div><div class="slot-tabs" role="group" aria-label="选择队伍位置"><button id="select-player" aria-pressed="true">01 主控 <b></b></button><button id="select-partner" aria-pressed="false">02 搭档 <b></b></button></div><div id="roster" class="roster" aria-label="四名可选角色"></div><div class="cast-detail"><div><h2 id="cast-name"></h2><span id="cast-role"></span></div><p id="cast-bio"></p><div id="cast-skills"></div></div><label class="ai-choice">搭档 AI <select id="title-ai"><option value="basic">基础 · 跟随出击</option><option value="skilled" selected>熟练 · 默契接力</option><option value="expert">高手 · 主动破局</option></select></label><p class="cast-note" id="selection-hint" aria-live="polite">选择主控，再选一位搭档。</p></div>
+      <div class="title-footer"><span>街口 / 瓜摊 / 不夜城</span><span>键盘 · 手柄 · 单人＋AI</span></div>
+    </div>
+    <div class="screen menu-screen" id="pause-screen" hidden><div class="menu-card"><p class="eyebrow">TAKE A BREATH</p><h2>街头，稍等。</h2><p id="pause-reason">游戏已暂停</p><button class="primary" id="resume">继续战斗 <span>ESC ↗</span></button><div class="settings"><label>搭档聪明程度<select id="ai-setting"><option value="basic">基础</option><option value="skilled">熟练</option><option value="expert">高手</option></select></label><label>音量<input id="volume" type="range" min="0" max="1" step=".05"></label><label>震屏强度<input id="shake" type="range" min="0" max="1" step=".1"></label><label>闪光强度<input id="flash" type="range" min="0" max="1" step=".1"></label></div><div class="menu-links"><button id="pause-moves">招式表</button><button id="restart">重试本场</button><button id="home">返回标题</button></div></div></div>
+    <div class="screen menu-screen" id="result-screen" hidden><div class="menu-card result"><p class="eyebrow" id="result-eyebrow">ROUND OVER</p><h2 id="result-title">再响一次。</h2><p id="result-copy"></p><div id="result-stats"></div><button class="primary" id="result-action">重试本场 ↗</button><button class="text-button" id="result-home">返回标题</button></div></div>
+    <div class="screen menu-screen" id="moves-screen" hidden><div class="moves-card"><div class="moves-head"><div><p class="eyebrow">KNOW YOUR NEXT MOVE</p><h2>下一拳，怎么接。</h2></div><button id="close-moves" aria-label="关闭招式表">✕</button></div><div class="moves-grid"><div><h3>基础操作</h3><p><kbd>WASD / ↑↓←→</kbd> 移动 <kbd>空格</kbd> 跳跃</p><p><kbd>J</kbd> 轻击 <kbd>K</kbd> 重击 <kbd>L</kbd> 闪避</p><p><kbd>Q</kbd> 切换 <kbd>E</kbd> 拾取 / 放下 / 长按救援</p><p><kbd>1 / 2 / 3</kbd> 小技能 <kbd>U</kbd> 终极技</p><p><kbd>I</kbd> 接力 / 合击 / 双人终结</p><h3>手柄</h3><p>X 轻击 · Y 重击 · A 跳跃 · B 闪避<br>LB 互动 · RB 切换 · RT 协作 · Start 暂停<br>LT＋X / Y / B 小技能 · LT＋A 终极技</p><h3>街头有招</h3><p>J 连按三次连招；J → J → K 变招。闪避后攻击发动突进，空中攻击发动飞踢或压击。</p><p>靠近失衡杂兵按 K 抓取，J 追加、K 投掷。E 拾取西瓜与折凳，重击推车能撞翻一排敌人。</p><p>小技能独立冷却，需空手落地使用；个人气槽满后释放终极技。AI 自动使用小技能，大招由你决定。</p></div><div id="roster-moves" class="roster-moves"></div></div></div></div>
+  </section>
+  <section id="skill-deck" class="skill-deck" aria-label="两位角色的技能栏" hidden></section>
+  <footer class="stage-bottom"><span id="hint">J 连击 <i>·</i> K 破防 <i>·</i> Q 切换 <i>·</i> I 双响</span><span class="footer-right">拳拳到肉。招招有响。<b>街头双响</b></span></footer>
+</main>
+<script type="module" src="app.js"></script>
+</body></html>

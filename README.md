@@ -4,6 +4,11 @@
 
 # pixelfx.
 
+Local arcade game: **街头双响 / Street Duet** — run `npm run game`, then open
+`http://localhost:8080/game/`. Choose two of four original heroes, each with three skills
+and an ultimate, and fight through a hand-designed pixel night market with an AI partner,
+live switching, environmental props and team finishers. See [game/README.md](game/README.md).
+
 **<!-- count -->244<!-- /count --> pixel art effects and animations, every one a small piece of code.** Fire,
 explosions, magic, weather, UI, pickups, critters and more. Play them live, recolor and mirror them, drop them into
 a browser game, or export sprite sheets for any engine. Plus a Claude Code skill that makes new ones the way a
