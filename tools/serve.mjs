@@ -8,10 +8,10 @@ import { join, extname, normalize, sep } from "node:path";
 import { ROOT } from "./lib/fxlib.mjs";
 
 const PORT = +(process.argv.slice(2).find(a => /^\d+$/.test(a)) ?? 8080);
-const ENTRY = process.argv.includes("--game") ? "game" : "gallery";
+const ENTRY = process.argv.includes("--gta2") ? "gta_2" : process.argv.includes("--gta") ? "gta" : process.argv.includes("--game") ? "game" : "gallery";
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8", ".json": "application/json", ".png": "image/png", ".gif": "image/gif",
+  ".css": "text/css; charset=utf-8", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif",
   ".svg": "image/svg+xml", ".woff2": "font/woff2", ".md": "text/plain; charset=utf-8", ".mp4": "video/mp4",
 };
 
@@ -27,4 +27,4 @@ createServer(async (req, res) => {
   } catch {
     res.writeHead(404).end("not found");
   }
-}).listen({ port: PORT, ...(ENTRY === 'game' ? { host: '127.0.0.1' } : {}) }, () => console.log(`${ENTRY}: http://localhost:${PORT}/${ENTRY}/`));
+}).listen({ port: PORT, ...(ENTRY !== 'gallery' ? { host: '127.0.0.1' } : {}) }, () => console.log(`${ENTRY}: http://localhost:${PORT}/${ENTRY}/`));

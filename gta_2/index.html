@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>九龙雨夜：失真线 · KOWLOON NOIR GTA</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="badge">GTA-NOIR</span>
+      <strong>九龙雨夜：失真线</strong>
+      <small>写实港风 × VN主线 × 244 PIXELFX</small>
+    </div>
+    <nav class="top-links">
+      <button id="btn-open-fx" class="pill neon">✦ 特效轮盘 <kbd>Tab</kbd></button>
+      <button id="btn-open-scenes" class="pill cyan">🗺 街区地图 <kbd>M</kbd></button>
+      <button id="btn-open-story" class="pill gold">📖 剧情档案 <kbd>V</kbd></button>
+      <button id="btn-sandbox-fx" class="pill">🔒 全244沙盒: 关</button>
+      <button id="btn-post" class="pill">🎬 电影滤镜: 开</button>
+      <button id="btn-clear-weather" class="pill">☀ 清天气</button>
+      <button id="btn-clear-wanted" class="pill">★ 消通缉</button>
+      <button id="btn-mute" class="pill">🔊 音效</button>
+      <a href="../gta/" class="pill link">像素原版 ↗</a>
+      <a href="../gallery/" class="pill link">特效画廊 ↗</a>
+    </nav>
+  </header>
+
+  <main class="stage-wrap">
+    <div class="viewport">
+      <canvas id="game" width="1440" height="810" tabindex="0"></canvas>
+
+      <!-- Top Left: Realistic Dual Protagonists & Cash -->
+      <div class="hud-tl">
+        <button class="hero-card active" id="hero-card-0" title="切换主角 [Q]">
+          <img id="portrait-0" src="./assets/portraits/avatar_chen.png" alt="陈砺">
+          <div class="hero-info">
+            <div class="hero-name"><span id="h0-name">陈砺</span> <em id="h0-tag">主控</em></div>
+            <div class="bar"><i id="h0-hp"></i></div>
+          </div>
+        </button>
+        <button class="hero-card" id="hero-card-1" title="切换主角 [Q]">
+          <img id="portrait-1" src="./assets/portraits/avatar_lin.png" alt="林汐">
+          <div class="hero-info">
+            <div class="hero-name"><span id="h1-name">林汐</span> <em id="h1-tag">搭档</em></div>
+            <div class="bar"><i id="h1-hp"></i></div>
+          </div>
+        </button>
+        <div class="stats-pill">
+          <span class="cash" id="hud-cash">$300</span>
+          <span class="chaos" id="hud-chaos">CHAOS 0</span>
+        </div>
+      </div>
+
+      <!-- Top Right: Wanted Stars, District & Story Mission Tracker -->
+      <div class="hud-tr">
+        <div class="wanted-stars" id="hud-stars" aria-label="通缉星级">☆☆☆☆☆</div>
+        <div class="scene-chip" id="hud-scene">庙街霓虹夜市</div>
+        <div class="weather-chip" id="hud-weather" hidden></div>
+        <div class="mission-box" id="mission-box">
+          <div class="mission-head">
+            <span class="chapter-pill" id="story-chapter">序章</span>
+            <strong id="story-trust">羁绊 50</strong>
+            <em id="story-align">中立</em>
+          </div>
+          <div class="mission-title" id="mission-title">自由探索九龙街头</div>
+          <div class="mission-desc" id="mission-desc">按 Tab 查看已解锁特效，或按 V 查看剧情日志。</div>
+          <div class="mission-bar"><i id="mission-fill"></i></div>
+          <button class="mission-warp" id="btn-mission-warp" hidden>前往任务街区 ➔</button>
+        </div>
+      </div>
+
+      <!-- Bottom Left: 8-Slot PixelFX Hotbar -->
+      <div class="hotbar" id="hotbar"></div>
+
+      <!-- Bottom Right: Vehicle / Controls Cheat -->
+      <div class="hud-br" id="hud-status">
+        <div id="veh-badge" hidden>
+          <span id="veh-name">红的士</span>
+          <strong id="veh-speed">0 KM/H</strong>
+          <div class="nitro-row"><span>NITRO</span><div class="nitro-bar"><i id="veh-nitro"></i></div></div>
+          <small>Shift 氮气 · 空格漂移 · H 鸣笛 · F 下车</small>
+        </div>
+        <div id="foot-badge">
+          WASD 移动 · Shift 冲刺 · 左键/J 像素技能 · 右键/K 格斗 · F 驾车 · E 互动 · Q 换人
+        </div>
+      </div>
+
+      <!-- Center Toast Banner -->
+      <div class="banner" id="hud-banner" hidden></div>
+
+      <!-- Visual Novel Overlay -->
+      <section class="vn-overlay" id="vn-overlay" hidden>
+        <div class="vn-bg" id="vn-bg"></div>
+        <div class="vn-scrim"></div>
+        <div class="vn-topbar">
+          <span class="vn-chapter-badge" id="vn-chapter">序章 · 失真雨夜</span>
+          <div class="vn-tools">
+            <button class="pill" id="vn-auto">▶ 自动</button>
+            <button class="pill" id="vn-skip">⏭ 跳过至抉择</button>
+          </div>
+        </div>
+        <div class="vn-toast" id="vn-toast" hidden></div>
+        <div class="vn-stage">
+          <img class="vn-portrait left" id="vn-left" alt="" hidden>
+          <img class="vn-portrait right" id="vn-right" alt="" hidden>
+        </div>
+        <div class="vn-choices" id="vn-choices" hidden></div>
+        <div class="vn-dialog-box" id="vn-dialog-box">
+          <div class="vn-speaker-row">
+            <strong id="vn-speaker">陈砺</strong>
+            <span id="vn-role">重案卧底探员</span>
+          </div>
+          <p class="vn-text" id="vn-text"></p>
+          <div class="vn-next-hint" id="vn-next-hint">点击对话框或按 空格 / Enter 继续 ▾</div>
+        </div>
+
+        <div class="vn-ending" id="vn-ending" hidden>
+          <div class="vn-ending-card">
+            <small id="vn-ending-sub">THE DAWN DOSSIER</small>
+            <h2 id="vn-ending-title">结局 A · 《拂晓卷宗》</h2>
+            <p id="vn-ending-desc"></p>
+            <div class="vn-ending-stats" id="vn-ending-stats"></div>
+            <div class="vn-ending-actions">
+              <button class="pill cyan" id="btn-ending-freeroam">继续自由探索（全 244 特效已解封）</button>
+              <button class="pill neon" id="btn-ending-restart">开启新周目</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Modal 1: Full 244-FX Wheel / Browser -->
+      <section class="modal" id="fx-modal" hidden>
+        <div class="modal-card wide">
+          <div class="modal-head">
+            <div>
+              <h2>✦ 像素异能轮盘（左键装备至当前槽位，Shift+点击立即释放）</h2>
+              <p id="fx-count-note">随主线剧情推进逐步解封全 244 个像素特效，亦可点击顶栏「全244沙盒」一键全开</p>
+            </div>
+            <button class="close-btn" id="close-fx">✕ Esc</button>
+          </div>
+          <div class="fx-toolbar">
+            <input id="fx-search" type="search" placeholder="搜索特效英文名、标签、分类（如 rocket, chain-lightning, black-hole, nuke）...">
+            <span class="slot-target">当前槽位：<strong id="fx-slot-label">槽位 1</strong></span>
+          </div>
+          <div class="cat-tabs" id="fx-cats"></div>
+          <div class="fx-grid" id="fx-grid"></div>
+        </div>
+      </section>
+
+      <!-- Modal 2: Scene Switcher & Custom Background Loader -->
+      <section class="modal" id="scene-modal" hidden>
+        <div class="modal-card">
+          <div class="modal-head">
+            <div>
+              <h2>🗺 九龙街区切换 & 自定义写实背景长卷</h2>
+              <p>选择 4 大写实港风街区或拖入任意本地横版街景图，即刻带车切换场景</p>
+            </div>
+            <button class="close-btn" id="close-scene">✕ Esc</button>
+          </div>
+
+          <div class="scene-section">
+            <label class="inline-select">
+              像素转场特效（<code>transitions/*</code>）：
+              <select id="transition-select"></select>
+            </label>
+            <div class="scene-cards" id="scene-cards"></div>
+          </div>
+
+          <div class="custom-bg-box" id="drop-zone">
+            <h3>📤 自定义写实街景长卷替换当前街区</h3>
+            <p>支持 16:9 或超宽横版街景图（自动适配 HD 810px 高度，上人行道 y:118~146 · 四车道 y:148~236 · 下人行道 y:238~264）。</p>
+            <div class="bg-actions">
+              <label class="file-btn">
+                选择 PNG/WebP/JPG 图片
+                <input type="file" id="bg-file-input" accept="image/png,image/webp,image/jpeg" hidden>
+              </label>
+              <button class="pill" id="btn-reset-bg">恢复当前街区默认写实图</button>
+            </div>
+            <div id="bg-upload-status" class="upload-status">也可直接将街景图片拖入此处</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Modal 3: Story Archive & Dialogue Log -->
+      <section class="modal" id="story-modal" hidden>
+        <div class="modal-card">
+          <div class="modal-head">
+            <div>
+              <h2>📖 九龙雨夜 · 剧情档案与对话回放</h2>
+              <p id="story-summary-line">当前进度：序章 · 搭档羁绊 50</p>
+            </div>
+            <button class="close-btn" id="close-story">✕ Esc</button>
+          </div>
+          <div class="story-controls">
+            <button class="pill cyan" id="btn-replay-vn">▶ 重播当前章节剧情</button>
+            <button class="pill neon" id="btn-reset-story">↺ 重置剧情开启新周目</button>
+          </div>
+          <div class="story-log" id="story-log"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

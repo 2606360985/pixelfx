@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>霓虹海岸 2D · NEON COAST GTA SANDBOX</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="badge">GTA-2D</span>
+      <strong>霓虹海岸</strong>
+      <small>NEON COAST SANDBOX · 244 PIXELFX</small>
+    </div>
+    <nav class="top-links">
+      <button id="btn-open-fx" class="pill neon">✦ 244 特效轮盘 <kbd>Tab</kbd></button>
+      <button id="btn-open-scenes" class="pill cyan">🗺 街区 / 自定义背景 <kbd>M</kbd></button>
+      <button id="btn-post" class="pill">🎬 移轴景深: 开</button>
+      <button id="btn-clear-weather" class="pill">☀ 清天气</button>
+      <button id="btn-clear-wanted" class="pill">★ 消通缉</button>
+      <button id="btn-mute" class="pill">🔊 音效</button>
+      <a href="../game/" class="pill link">街头双响 ↗</a>
+      <a href="../gallery/" class="pill link">特效画廊 ↗</a>
+    </nav>
+  </header>
+
+  <main class="stage-wrap">
+    <div class="viewport">
+      <canvas id="game" width="480" height="270" tabindex="0"></canvas>
+
+      <!-- Top Left: Dual Protagonists & Cash -->
+      <div class="hud-tl">
+        <button class="hero-card active" id="hero-card-0" title="切换主角 [Q]">
+          <canvas id="portrait-0" width="48" height="48"></canvas>
+          <div class="hero-info">
+            <div class="hero-name"><span id="h0-name">陆川</span> <em id="h0-tag">主控</em></div>
+            <div class="bar"><i id="h0-hp"></i></div>
+          </div>
+        </button>
+        <button class="hero-card" id="hero-card-1" title="切换主角 [Q]">
+          <canvas id="portrait-1" width="48" height="48"></canvas>
+          <div class="hero-info">
+            <div class="hero-name"><span id="h1-name">霓莎</span> <em id="h1-tag">搭档</em></div>
+            <div class="bar"><i id="h1-hp"></i></div>
+          </div>
+        </button>
+        <div class="stats-pill">
+          <span class="cash" id="hud-cash">$300</span>
+          <span class="chaos" id="hud-chaos">CHAOS 0</span>
+        </div>
+      </div>
+
+      <!-- Top Right: Wanted Stars, Scene & Livestream Trend -->
+      <div class="hud-tr">
+        <div class="wanted-stars" id="hud-stars" aria-label="通缉星级">☆☆☆☆☆</div>
+        <div class="scene-chip" id="hud-scene">棕榈日落大道</div>
+        <div class="weather-chip" id="hud-weather" hidden></div>
+        <div class="trend-box" id="trend-box">
+          <div class="trend-head">
+            <span class="live-dot">LIVE</span>
+            <strong id="trend-viewers">120 围观</strong>
+            <em id="trend-overdrive" hidden>狂暴冷却×2</em>
+          </div>
+          <div class="trend-title" id="trend-title">撞断消防栓并喷泉冲人</div>
+          <div class="trend-bar"><i id="trend-fill"></i></div>
+          <div class="danmaku" id="trend-danmaku"></div>
+        </div>
+      </div>
+
+      <!-- Bottom Center: 8-Slot FX Hotbar -->
+      <div class="hotbar" id="hotbar"></div>
+
+      <!-- Bottom Right: Vehicle / Controls Cheat -->
+      <div class="hud-br" id="hud-status">
+        <div id="veh-badge" hidden>
+          <span id="veh-name">跑车</span>
+          <strong id="veh-speed">0 KM/H</strong>
+          <div class="nitro-row"><span>NITRO</span><div class="nitro-bar"><i id="veh-nitro"></i></div></div>
+          <small>Shift 喷射 · 空格漂移 · H 鸣笛 · F 下车</small>
+        </div>
+        <div id="foot-badge">
+          WASD 移动 · Shift 冲刺 · 左键/J 特效 · 右键/K 挥拳 · F 驾车 · E 互动
+        </div>
+      </div>
+
+      <!-- Center Toast Banner -->
+      <div class="banner" id="hud-banner" hidden></div>
+
+      <!-- Modal 1: Full 244-FX Wheel / Browser -->
+      <section class="modal" id="fx-modal" hidden>
+        <div class="modal-card wide">
+          <div class="modal-head">
+            <div>
+              <h2>✦ 全 244 特效技能库（鼠标左键直接装备到当前槽位，Shift+点击立即释放）</h2>
+              <p id="fx-count-note">共 244 个像素特效，支持徒步释放、驾车 Drive-by、伤害路人、附加状态、召唤生物、切换天气与全屏转场</p>
+            </div>
+            <button class="close-btn" id="close-fx">✕ Esc</button>
+          </div>
+          <div class="fx-toolbar">
+            <input id="fx-search" type="search" placeholder="搜索特效英文名、标签、分类（如 nuke, rocket, black-hole, burning, rain）...">
+            <span class="slot-target">当前装备槽位：<strong id="fx-slot-label">槽位 1</strong></span>
+          </div>
+          <div class="cat-tabs" id="fx-cats"></div>
+          <div class="fx-grid" id="fx-grid"></div>
+        </div>
+      </section>
+
+      <!-- Modal 2: Scene Switcher & Custom PNG Background Loader -->
+      <section class="modal" id="scene-modal" hidden>
+        <div class="modal-card">
+          <div class="modal-head">
+            <div>
+              <h2>🗺 街区切换 & 合规像素背景图替换</h2>
+              <p>选择内置街区或拖入任意合规 GTA 风格像素 PNG 长卷，即刻带车切换场景</p>
+            </div>
+            <button class="close-btn" id="close-scene">✕ Esc</button>
+          </div>
+
+          <div class="scene-section">
+            <label class="inline-select">
+              转场特效（<code>transitions/*</code>）：
+              <select id="transition-select"></select>
+            </label>
+            <div class="scene-cards" id="scene-cards"></div>
+          </div>
+
+          <div class="custom-bg-box" id="drop-zone">
+            <h3>📤 自定义合规 PNG 背景图替换当前街区</h3>
+            <p>推荐高度 <strong>270px</strong>（1:1 像素对齐）或 540px / 1080px，宽度 <strong>960px ~ 4800px</strong>；横版 2.5D 街景（上人行道 y:118~146 · 四车道 y:148~236 · 下人行道 y:238~264）。</p>
+            <div class="bg-actions">
+              <label class="file-btn">
+                选择 PNG/WebP 图片
+                <input type="file" id="bg-file-input" accept="image/png,image/webp,image/jpeg" hidden>
+              </label>
+              <button class="pill" id="btn-reset-bg">恢复当前街区默认画风</button>
+            </div>
+            <div id="bg-upload-status" class="upload-status">也可以直接把本地像素背景图拖进此框内</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

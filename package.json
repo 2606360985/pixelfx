@@ -17,7 +17,11 @@
     "check": "node tools/check.mjs",
     "gallery": "node tools/serve.mjs",
     "game": "node tools/serve.mjs --game",
-    "test:game": "node --test game/tests/*.test.mjs"
+    "gta": "node tools/serve.mjs --gta",
+    "gta2": "node tools/serve.mjs --gta2",
+    "test:game": "node --test game/tests/*.test.mjs",
+    "test:gta": "node --test gta/tests/*.test.mjs",
+    "test:gta2": "node --test gta_2/tests/*.test.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.10"
