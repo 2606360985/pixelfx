@@ -21,6 +21,10 @@ const els = {
   fxSlotLabel: document.getElementById("fx-slot-label"),
   sceneCards: document.getElementById("scene-cards"),
   transitionSelect: document.getElementById("transition-select"),
+  chkFgOcclusion: document.getElementById("chk-fg-occlusion"),
+  parallaxSelect: document.getElementById("parallax-select"),
+  btnCam: document.getElementById("btn-cam"),
+  btnFg: document.getElementById("btn-fg"),
   dropZone: document.getElementById("drop-zone"),
   bgFileInput: document.getElementById("bg-file-input"),
   bgUploadStatus: document.getElementById("bg-upload-status"),
@@ -273,10 +277,36 @@ document.getElementById("btn-mute").addEventListener("click", (e) => {
   audio.muted = !audio.muted;
   e.currentTarget.textContent = audio.muted ? "🔇 静音" : "🔊 音效";
 });
-document.getElementById("btn-post").addEventListener("click", (e) => {
-  renderer.postProcess = !renderer.postProcess;
-  e.currentTarget.textContent = renderer.postProcess ? "🎬 移轴景深: 开" : "🎬 移轴景深: 关";
+
+function syncCameraControls() {
+  els.btnCam.textContent = renderer.cam.cinematic ? "🎥 电影镜头: 开" : "🎥 电影镜头: 关";
+  els.btnFg.textContent = renderer.foregroundOcclusion ? "🌴 前景遮挡: 开" : "🌴 前景遮挡: 关";
+  els.btnFg.classList.toggle("cyan", renderer.foregroundOcclusion);
+  if (els.chkFgOcclusion) els.chkFgOcclusion.checked = renderer.foregroundOcclusion;
+}
+
+els.btnCam.addEventListener("click", () => {
+  const next = !renderer.cam.cinematic;
+  renderer.cam.cinematic = next;
+  renderer.postProcess = next;
+  syncCameraControls();
 });
+
+els.btnFg.addEventListener("click", () => {
+  renderer.foregroundOcclusion = !renderer.foregroundOcclusion;
+  syncCameraControls();
+});
+
+els.chkFgOcclusion.addEventListener("change", (e) => {
+  renderer.foregroundOcclusion = e.target.checked;
+  syncCameraControls();
+});
+
+els.parallaxSelect.addEventListener("change", (e) => {
+  renderer.parallaxStrength = Number(e.target.value);
+});
+
+syncCameraControls();
 
 els.heroCard0.addEventListener("click", () => {
   if (world.activeIdx !== 0) world.switchHero();
@@ -305,7 +335,7 @@ els.dropZone.addEventListener("drop", (e) => {
 document.getElementById("btn-reset-bg").addEventListener("click", () => {
   renderer.scenes.resetSceneBackground(world.sceneId);
   world.setSceneWidth(world.sceneId, 2400);
-  els.bgUploadStatus.textContent = "已恢复当前街区内置像素画风。";
+  els.bgUploadStatus.textContent = "已恢复当前街区默认多层视差背景。";
   renderSceneModal();
 });
 

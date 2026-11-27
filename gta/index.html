@@ -16,7 +16,8 @@
     <nav class="top-links">
       <button id="btn-open-fx" class="pill neon">✦ 244 特效轮盘 <kbd>Tab</kbd></button>
       <button id="btn-open-scenes" class="pill cyan">🗺 街区 / 自定义背景 <kbd>M</kbd></button>
-      <button id="btn-post" class="pill">🎬 移轴景深: 开</button>
+      <button id="btn-cam" class="pill">🎥 电影镜头: 开</button>
+      <button id="btn-fg" class="pill cyan">🌴 前景遮挡: 开</button>
       <button id="btn-clear-weather" class="pill">☀ 清天气</button>
       <button id="btn-clear-wanted" class="pill">★ 消通缉</button>
       <button id="btn-mute" class="pill">🔊 音效</button>
@@ -54,7 +55,7 @@
       <!-- Top Right: Wanted Stars, Scene & Livestream Trend -->
       <div class="hud-tr">
         <div class="wanted-stars" id="hud-stars" aria-label="通缉星级">☆☆☆☆☆</div>
-        <div class="scene-chip" id="hud-scene">棕榈日落大道</div>
+        <div class="scene-chip" id="hud-scene">海洋景观日落大道</div>
         <div class="weather-chip" id="hud-weather" hidden></div>
         <div class="trend-box" id="trend-box">
           <div class="trend-head">
@@ -122,6 +123,21 @@
               转场特效（<code>transitions/*</code>）：
               <select id="transition-select"></select>
             </label>
+            <div class="parallax-settings">
+              <label class="inline-check">
+                <input type="checkbox" id="chk-fg-occlusion" checked>
+                启用前景遮挡层（棕榈 / 路灯 / 街边灌木近景位移）
+              </label>
+              <label class="inline-select">
+                多层视差景深强度：
+                <select id="parallax-select">
+                  <option value="1.45">电影强景深 (1.45×)</option>
+                  <option value="1" selected>标准多层视差 (1.0×)</option>
+                  <option value="0.6">柔和视差 (0.6×)</option>
+                  <option value="0">平面静态 (0×)</option>
+                </select>
+              </label>
+            </div>
             <div class="scene-cards" id="scene-cards"></div>
           </div>
 

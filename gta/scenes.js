@@ -1,5 +1,6 @@
 import { pixels } from "./art.js";
-import { SCENE_BY_ID, SCENE_SPECS, HEIGHT } from "./data.js";
+import { SCENE_BY_ID, SCENE_SPECS, WIDTH, HEIGHT } from "./data.js";
+import { PARALLAX_LAYERS, computeParallaxOffset } from "./camera.js";
 
 const BAYER4 = [
   0, 8, 2, 10,
@@ -7,6 +8,20 @@ const BAYER4 = [
   3, 11, 1, 9,
   15, 7, 13, 5,
 ];
+
+function wrapMod(v, mod) {
+  return ((v % mod) + mod) % mod;
+}
+
+function drawTiledLayer(ctx, img, shiftX, y = 0) {
+  if (!img) return;
+  const w = img.width;
+  if (!w) return;
+  const off = Math.round(wrapMod(shiftX, w));
+  for (let dx = -off; dx < WIDTH; dx += w) {
+    ctx.drawImage(img, dx, Math.round(y));
+  }
+}
 
 function ditherSky(ctx, w, h, stops) {
   const img = ctx.createImageData(w, h);
@@ -37,10 +52,10 @@ function ditherSky(ctx, w, h, stops) {
 
 function drawCumulusClouds(r, p, pal) {
   const clusters = [
-    { x: 55, y: 24, s: 1.15 },
-    { x: 215, y: 16, s: 1.35 },
-    { x: 390, y: 28, s: 0.95 },
-    { x: 530, y: 20, s: 1.2 },
+    { x: 48, y: 24, s: 1.15 },
+    { x: 205, y: 16, s: 1.35 },
+    { x: 375, y: 28, s: 0.95 },
+    { x: 520, y: 20, s: 1.2 },
   ];
   for (const cl of clusters) {
     const sw = Math.round(52 * cl.s);
@@ -58,6 +73,27 @@ function drawCumulusClouds(r, p, pal) {
       pal.base
     );
   }
+}
+
+function buildCloudRibbon(pal) {
+  const c = document.createElement("canvas");
+  c.width = 640;
+  c.height = 96;
+  const ctx = c.getContext("2d");
+  const { r, p } = pixels(ctx);
+  const ribbons = [
+    { x: 30, y: 26, w: 72, h: 10 },
+    { x: 170, y: 16, w: 94, h: 12 },
+    { x: 330, y: 34, w: 66, h: 9 },
+    { x: 470, y: 20, w: 86, h: 11 },
+  ];
+  for (const rb of ribbons) {
+    r(rb.x, rb.y, rb.w, rb.h, pal.base);
+    r(rb.x + 8, rb.y - 4, rb.w - 16, 6, pal.mid);
+    r(rb.x + 16, rb.y - 6, rb.w - 32, 3, pal.top);
+    p([[rb.x - 12, rb.y + rb.h], [rb.x + 4, rb.y + 3], [rb.x + rb.w - 4, rb.y + 3], [rb.x + rb.w + 12, rb.y + rb.h]], pal.base);
+  }
+  return c;
 }
 
 function drawCurvedPalm(r, p, x, baseY, scale = 1, leanDir = 1, pal = { trunk: "#242e3b", lit: "#524c5c", frondDark: "#143038", frondMid: "#215452", frondLit: "#3d8573" }) {
@@ -108,187 +144,356 @@ function drawNeonSign(c, r, x, y, w, h, text, accent, glow = true) {
   c.fillText(text, x + w / 2, y + h / 2 + 0.5);
 }
 
-// True 3-plane extruded 3D pixel building: front facade + angled shaded side wall + rooftop parapet/AC/vents
-function drawVolumetricDecoBuilding(c, r, p, opts) {
-  const { x, w, h, wall, shade, roofCol, trim, neon, sign, awning, darkMode = false } = opts;
-  const top = 118 - h;
-  const extrude = 14;
-  const frontW = w - extrude;
-  const ink = "#121626";
-
-  // 1. Rooftop slab & 3D angled side wall
-  p(
-    [
-      [x + 2, top],
-      [x + extrude, top - 7],
-      [x + w, top - 7],
-      [x + frontW, top],
-    ],
-    roofCol || trim
-  );
-  p(
-    [
-      [x + frontW, top],
-      [x + w, top - 7],
-      [x + w, 118],
-      [x + frontW, 118],
-    ],
-    shade
-  );
-  // Roof AC unit & vent extrusion
-  const acX = x + Math.round(frontW * 0.62);
-  r(acX, top - 11, 14, 6, "#2c3448");
-  r(acX + 2, top - 10, 8, 4, "#7989a3");
-  r(acX + 10, top - 10, 3, 4, "#4b5870");
-  // Side wall recessed windows in shadow
-  for (let sy = top + 16; sy < 104; sy += 20) {
-    p([[x + frontW + 3, sy], [x + frontW + 10, sy - 4], [x + frontW + 10, sy + 5], [x + frontW + 3, sy + 9]], darkMode ? "#262b4a" : "#446278");
-  }
-
-  // 2. Stepped Art Deco ziggurat crown with extrusion
-  const crownW = Math.round(frontW * 0.42);
-  const crownX = x + Math.round((frontW - crownW) / 2);
-  r(crownX, top - 11, crownW, 11, ink);
-  r(crownX + 2, top - 9, crownW - 6, 9, wall);
-  r(crownX + crownW - 5, top - 9, 4, 9, shade);
-  r(crownX + Math.round(crownW / 2) - 4, top - 17, 8, 7, trim);
-  r(crownX + 2, top - 9, crownW - 4, 2, neon);
-
-  // 3. Main front facade + crisp shadow edge
-  r(x, top, frontW, h, ink);
-  r(x + 2, top + 2, frontW - 4, h - 2, wall);
-  r(x - 2, top, frontW + 4, 3, trim);
-  r(x + 2, top + 4, frontW - 4, 2, neon);
-  r(x + 4, top + 29, frontW - 8, 2, trim);
-
-  // Vertical glass-block stair tower flute
-  const towerX = x + 7;
-  r(towerX, top + 7, 13, h - 11, darkMode ? "#18233b" : "#5e9ab8");
-  for (let gy = top + 10; gy < 110; gy += 6) {
-    r(towerX + 2, gy, 9, 2, darkMode ? "#4ff2ff66" : "#dcf7ff99");
-  }
-
-  // Recessed Deco windows + 3D eyebrow sunshade drop shadow
-  for (let wx = x + 26; wx < x + frontW - 20; wx += 24) {
-    r(wx - 2, top + 11, 17, 2, trim);
-    r(wx - 1, top + 13, 15, 2, "#0d122066");
-    r(wx, top + 14, 13, 12, darkMode ? "#181e33" : "#253b52");
-    r(wx + 2, top + 16, 9, 8, darkMode ? (wx % 48 === 0 ? "#ffd97d" : "#3a5678") : "#8bd4eb");
-  }
-
-  // 4. Signboard + striped 3D awning + lobby glow
-  drawNeonSign(c, r, x + 24, top + 34, frontW - 34, 18, sign, neon);
-  if (awning) {
-    p([[x + 8, 86], [x + frontW - 8, 86], [x + frontW - 2, 97], [x + 3, 97]], awning[0]);
-    for (let sx = x + 10; sx < x + frontW - 10; sx += 11) {
-      p([[sx, 86], [sx + 5, 86], [sx + 3, 97], [sx - 2, 97]], awning[1]);
-    }
-    r(x + 6, 97, frontW - 12, 3, "#0d122055");
-  }
-  r(x + 14, 98, frontW - 28, 20, "#121626");
-  r(x + 18, 100, frontW - 36, 17, darkMode ? "#2a1b3d" : "#443a4d");
-  r(x + 22, 102, frontW - 44, 12, darkMode ? "#ff68b444" : "#ffd68a55");
-}
-
-function drawBeachGap(r, p, x, w, isNight = false) {
-  // Transparent/open sky above y=76 lets Layer 1 & Layer 2 parallax shine through!
-  r(x, 76, w, 18, isNight ? "#162d47" : "#228599");
-  r(x, 82, w, 3, isNight ? "#244769" : "#40b6c4");
-  r(x, 92, w, 2, isNight ? "#507896" : "#d8f7fa");
-  r(x, 94, w, 24, isNight ? "#575166" : "#e8d2a6");
-  r(x, 94, w, 3, isNight ? "#484459" : "#d4ba8b");
-  r(x, 113, w, 5, isNight ? "#4e536e" : "#d6c8b6");
-  r(x, 112, w, 1, "#182030");
+function drawBeachGap(r, p, x, w, isNight = false, baseFloorY = 118) {
+  const seaTop = baseFloorY - 42;
+  r(x, seaTop, w, 18, isNight ? "#162d47" : "#228599");
+  r(x, seaTop + 6, w, 3, isNight ? "#244769" : "#40b6c4");
+  r(x, seaTop + 16, w, 2, isNight ? "#507896" : "#d8f7fa");
+  r(x, seaTop + 18, w, 24, isNight ? "#575166" : "#e8d2a6");
+  r(x, seaTop + 18, w, 3, isNight ? "#484459" : "#d4ba8b");
+  r(x, baseFloorY - 5, w, 5, isNight ? "#4e536e" : "#d6c8b6");
+  r(x, baseFloorY - 6, w, 1, "#182030");
   if (w >= 110) {
     const lx = x + Math.round(w * 0.44);
-    r(lx, 96, 2, 14, "#85654e");
-    r(lx + 16, 96, 2, 14, "#85654e");
-    r(lx - 2, 86, 20, 11, isNight ? "#2a4763" : "#44d4c8");
-    r(lx + 16, 86, 5, 11, isNight ? "#1c3145" : "#2b9e96");
-    p([[lx - 4, 86], [lx + 9, 79], [lx + 23, 86]], isNight ? "#453359" : "#ff6e9c");
-    r(lx + 3, 89, 10, 5, "#1b2838");
+    r(lx, seaTop + 20, 2, 14, "#85654e");
+    r(lx + 16, seaTop + 20, 2, 14, "#85654e");
+    r(lx - 2, seaTop + 10, 20, 11, isNight ? "#2a4763" : "#44d4c8");
+    r(lx + 16, seaTop + 10, 5, 11, isNight ? "#1c3145" : "#2b9e96");
+    p([[lx - 4, seaTop + 10], [lx + 9, seaTop + 3], [lx + 23, seaTop + 10]], isNight ? "#453359" : "#ff6e9c");
+    r(lx + 3, seaTop + 13, 10, 5, "#1b2838");
   }
   for (let ux = x + 26; ux < x + w - 24; ux += 64) {
-    r(ux, 100, 1, 13, "#705644");
-    p([[ux - 9, 101], [ux, 95], [ux + 10, 101]], ux % 2 ? "#ff689c" : "#3ce0cc");
+    r(ux, seaTop + 24, 1, 13, "#705644");
+    p([[ux - 9, seaTop + 25], [ux, seaTop + 19], [ux + 10, seaTop + 25]], ux % 2 ? "#ff689c" : "#3ce0cc");
   }
 }
 
-function paintGTA6Boulevard(c, width, theme) {
+function paintGTA6Boulevard(c, width, theme, opts = {}) {
   const { r, p } = pixels(c);
-  r(0, 118, width, 28, theme.sidewalk);
-  r(0, 144, width, 3, theme.curb);
-  r(0, 147, width, 1, "#111622");
+  const topSwY = opts.topSwY ?? 118;
+  const curbY = opts.curbY ?? 144;
+  const roadTop = opts.roadTop ?? 148;
+  const roadH = opts.roadH ?? 89;
+  const botCurbY = roadTop + roadH;
+  const botWalkH = Math.max(12, HEIGHT - botCurbY - 3);
+
+  r(0, topSwY, width, curbY - topSwY, theme.sidewalk);
+  r(0, curbY, width, 3, theme.curb);
+  r(0, curbY + 3, width, 1, "#111622");
   for (let x = 0; x < width; x += 28) {
-    r(x, 118, 1, 26, theme.sidewalkLine);
-    r(x + 2, 144, 22, 1, "#ffffff2e");
-  }
-  for (let x = 14; x < width; x += 56) {
-    r(x, 131, 26, 1, theme.sidewalkLine);
+    r(x, topSwY, 1, curbY - topSwY, theme.sidewalkLine);
+    r(x + 2, curbY, 22, 1, "#ffffff2e");
   }
 
-  r(0, 148, width, 89, theme.asphalt);
-  r(0, 148, width, 8, theme.asphaltShade);
-  r(0, 229, width, 8, theme.asphaltShade);
-
-  for (let i = 0; i < Math.floor(width / 8); i++) {
-    const x = (i * 173) % (width - 18);
-    const y = 152 + ((i * 29) % 80);
-    r(x, y, 4 + (i % 9), 1, i % 2 === 0 ? theme.asphaltSpeckA : theme.asphaltSpeckB);
+  if (opts.roadImage) {
+    const rw = opts.roadImage.width || 600;
+    for (let x = 0; x < width; x += rw) {
+      c.drawImage(opts.roadImage, 0, 0, rw, opts.roadImage.height, x, roadTop, rw, roadH);
+    }
+    if (opts.isNight) {
+      r(0, roadTop, width, roadH, "#0c0f2855");
+    }
+  } else {
+    r(0, roadTop, width, roadH, theme.asphalt);
+    for (let i = 0; i < Math.floor(width / 8); i++) {
+      const x = (i * 173) % (width - 18);
+      const y = roadTop + 4 + ((i * 29) % Math.max(12, roadH - 10));
+      r(x, y, 4 + (i % 9), 1, i % 2 === 0 ? theme.asphaltSpeckA : theme.asphaltSpeckB);
+    }
   }
-  for (const wy of [156, 178, 202, 222]) {
-    r(0, wy, width, 2, "#00000018");
+
+  r(0, roadTop, width, 6, theme.asphaltShade);
+  r(0, botCurbY - 6, width, 6, theme.asphaltShade);
+  if (opts.gutterNeon) {
+    r(0, roadTop + 1, width, 2, opts.gutterNeon);
   }
 
-  for (let x = 12; x < width; x += 40) {
-    r(x, 169, 18, 2, "#d8e0eb99");
-    r(x, 214, 18, 2, "#d8e0eb99");
-  }
+  const laneMid = Math.round(roadTop + roadH * 0.5);
+  const upperDash = Math.round(roadTop + roadH * 0.25);
+  const lowerDash = Math.round(roadTop + roadH * 0.75);
 
-  r(0, 190, width, 1, "#f2b84b");
-  r(0, 193, width, 1, "#f2b84b");
+  for (let x = 14; x < width; x += 42) {
+    r(x, upperDash, 16, 1, "#d8e0eb55");
+    r(x, lowerDash, 16, 1, "#d8e0eb55");
+  }
+  r(0, laneMid - 1, width, 1, "#f2b84baa");
+  r(0, laneMid + 1, width, 1, "#f2b84baa");
 
   for (let x = 260; x < width - 100; x += 480) {
-    for (let y = 151; y < 234; y += 8) {
-      r(x, y, 14, 4, "#e6ecf5aa");
+    for (let y = roadTop + 4; y < botCurbY - 4; y += 7) {
+      r(x, y, 12, 3, "#e6ecf566");
     }
-    r(x - 65, 160, 14, 2, "#d8e0eb88");
-    p([[x - 71, 161], [x - 63, 157], [x - 63, 165]], "#d8e0eb88");
-    r(x + 48, 223, 14, 2, "#d8e0eb88");
-    p([[x + 68, 224], [x + 60, 220], [x + 60, 228]], "#d8e0eb88");
+    r(x - 62, roadTop + 12, 12, 2, "#d8e0eb55");
+    p([[x - 68, roadTop + 13], [x - 60, roadTop + 9], [x - 60, roadTop + 17]], "#d8e0eb55");
+    r(x + 48, botCurbY - 14, 12, 2, "#d8e0eb55");
+    p([[x + 66, botCurbY - 13], [x + 58, botCurbY - 17], [x + 58, botCurbY - 9]], "#d8e0eb55");
   }
 
-  for (let x = 160; x < width; x += 320) {
-    r(x, 148, 12, 3, "#141924");
-    r(x + 2, 149, 2, 2, "#354157");
-    r(x + 6, 149, 2, 2, "#354157");
+  // Bottom curb (match bg1 checkered style if requested)
+  if (opts.checkeredBottomCurb) {
+    for (let x = 0; x < width; x += 14) {
+      r(x, botCurbY, 7, 4, "#e6d8e6");
+      r(x + 7, botCurbY, 7, 4, "#1e1f33");
+    }
+    r(0, botCurbY + 4, width, 1, "#0d101c");
+  } else {
+    r(0, botCurbY, width, 3, theme.curb);
   }
-
-  r(0, 237, width, 3, theme.curb);
-  r(0, 240, width, 30, theme.bottomWalk);
-  for (let x = 0; x < width; x += 24) {
-    r(x, 240, 1, 30, theme.sidewalkLine);
+  r(0, botCurbY + 4, width, botWalkH, theme.bottomWalk);
+  for (let x = 0; x < width; x += 26) {
+    r(x, botCurbY + 4, 1, botWalkH, theme.sidewalkLine);
   }
 }
 
-function buildProceduralScene(spec) {
-  const w = spec.width || 2400;
+function buildFgItems(width, ambient) {
+  const items = [];
+  for (let x = 85; x < width; x += 210) {
+    items.push({ kind: "palm", x, factor: PARALLAX_LAYERS.fgNear.x, scale: 0.96 + ((x / 210) % 2) * 0.14, lean: (x % 420 === 85) ? 1 : -1 });
+    items.push({ kind: "lamp", x: x + 105, factor: PARALLAX_LAYERS.fgNear.x });
+  }
+  for (let x = 40; x < width; x += 145) {
+    items.push({
+      kind: (x / 145) % 2 === 0 ? "shrub" : "bollard",
+      x,
+      factor: PARALLAX_LAYERS.fgClose.x,
+      ambient,
+    });
+  }
+  return items;
+}
 
-  // Layer 0+1: Far sky & distant skyline (640x118)
+function drawOceanPromenadeGap(sp, x, w, isNight) {
+  const { r, p } = sp;
+  // Coral stone sea-wall & sunset promenade opening at y=118..154 so Layer 0/1/2 shine behind it!
+  r(x, 126, w, 10, isNight ? "#2f3354" : "#d99b9b");
+  r(x, 125, w, 2, isNight ? "#4f5987" : "#ffd6c9");
+  r(x, 136, w, 20, isNight ? "#3f3860" : "#cf899a");
+  for (let px = x + 12; px < x + w - 12; px += 36) {
+    r(px, 118, 4, 10, isNight ? "#242847" : "#a86a7a");
+    r(px + 1, 116, 2, 2, isNight ? "#4ff2ff" : "#ffd694");
+  }
+  // Checkered curb continuation matching bg1_street.png bottom edge (y=154..158)
+  for (let cx = x; cx < x + w; cx += 14) {
+    r(cx, 154, 7, 4, isNight ? "#98a4cf" : "#e8d6dc");
+    r(cx + 7, 154, 7, 4, "#191c2e");
+  }
+  r(x, 158, w, 2, isNight ? "#46b8ff55" : "#d85bff44");
+  // Lifeguard / beach hut silhouette in promenade gap
+  if (w >= 170) {
+    const hx = x + Math.round(w * 0.46);
+    r(hx, 112, 24, 16, isNight ? "#263154" : "#e6a89c");
+    p([[hx - 4, 112], [hx + 12, 102], [hx + 28, 112]], isNight ? "#3c688a" : "#ff6b9d");
+    r(hx + 6, 116, 12, 6, isNight ? "#42f2ff" : "#2b2042");
+  }
+}
+
+function buildFarSkyline(fc, fp, ambient, beacons) {
+  const isNight = ambient === "neon";
+  if (ambient === "harbor") {
+    for (let i = 0; i < 4; i++) {
+      const cx = 75 + i * 170;
+      fp.r(cx, 44, 4, 76, "#3b4f63");
+      fp.r(cx - 10, 44, 48, 4, "#526980");
+      fp.r(cx + 22, 48, 2, 22, "#243140");
+    }
+    fp.r(340, 82, 128, 36, "#263647");
+    fp.r(356, 68, 36, 14, "#405469");
+    return;
+  }
+  if (ambient === "bayou") {
+    fp.r(0, 104, 640, 40, "#243b3b");
+    for (let i = 0; i < 20; i++) {
+      const tx = i * 32;
+      fp.r(tx + 10, 68 + (i % 3) * 8, 5, 48, "#1b2924");
+      fp.p([[tx, 78], [tx + 12, 56], [tx + 25, 78]], "#243d31");
+    }
+    return;
+  }
+
+  // Sunset / Neon Vice City distant Art Deco skyline
+  for (let i = 0; i < 15; i++) {
+    const bx = i * 44 + (i % 2) * 5;
+    const bh = 28 + ((i * 19) % 46);
+    const topY = 132 - bh;
+    const bodyCol = isNight ? (i % 2 ? "#141633" : "#1c1a42") : (i % 2 ? "#593b75" : "#6c4580");
+    const sideCol = isNight ? "#0d0e24" : "#3f2957";
+    const roofCol = isNight ? (i % 2 ? "#42f2ff" : "#ff4fa8") : "#ff9b8f";
+    fp.r(bx, topY, 26, bh, bodyCol);
+    fp.r(bx + 26, topY, 6, bh, sideCol);
+    fp.r(bx + 2, topY, 22, 2, roofCol);
+    if (i % 3 === 0) {
+      fp.r(bx + 9, topY - 8, 8, 8, bodyCol);
+      fp.r(bx + 12, topY - 14, 2, 6, roofCol);
+    }
+    for (let wy = topY + 6; wy < 126; wy += 6) {
+      fp.r(bx + 5, wy, 3, 2, (i + wy) % 4 === 0 ? (isNight ? "#4ef2ff" : "#ffe0a3") : (isNight ? "#ff5da844" : "#87579c"));
+      fp.r(bx + 15, wy, 3, 2, isNight ? "#ffd96b66" : "#87579c");
+    }
+    if (bh > 52) beacons.push({ x: bx + 13, y: topY - (i % 3 === 0 ? 15 : 3) });
+  }
+}
+
+function buildMidLayer(mc, mp, ambient) {
+  const isNight = ambient === "neon";
+  if (ambient === "harbor") {
+    for (let sx = 70; sx < 680; sx += 160) {
+      mp.r(sx, 108, 18, 4, "#d8e6f0");
+      mp.p([[sx + 9, 82], [sx + 9, 106], [sx + 18, 106]], "#f0f7fc");
+    }
+    return;
+  }
+  if (ambient === "bayou") {
+    for (let i = 0; i < 11; i++) {
+      drawCurvedPalm(mp.r, mp.p, 35 + i * 64, 118, 0.7, 1, {
+        trunk: "#222620",
+        lit: "#3e4034",
+        frondDark: "#192b21",
+        frondMid: "#243d2d",
+        frondLit: "#3a5c3c",
+      });
+    }
+    return;
+  }
+
+  // Midground secondary Art Deco hotel silhouettes & palm ridge (moves at 0.48x behind bg1_street)
+  for (let i = 0; i < 9; i++) {
+    const bx = 18 + i * 80;
+    const bh = 36 + ((i * 23) % 34);
+    const ty = 136 - bh;
+    const wall = isNight ? "#222147" : (i % 2 ? "#8c598c" : "#a1678f");
+    const shade = isNight ? "#151533" : "#613d69";
+    mp.r(bx, ty, 38, bh, wall);
+    mp.r(bx + 38, ty, 8, bh, shade);
+    mp.r(bx + 2, ty, 34, 2, isNight ? "#ff5ca8" : "#ffc29e");
+    for (let wy = ty + 8; wy < 128; wy += 8) {
+      mp.r(bx + 7, wy, 6, 4, isNight ? "#42f2ff55" : "#ffd9b377");
+      mp.r(bx + 20, wy, 6, 4, isNight ? "#ff68b455" : "#4a2c5966");
+    }
+    drawCurvedPalm(mp.r, mp.p, bx + 54, 132, 0.65, i % 2 ? 1 : -1, {
+      trunk: isNight ? "#171a33" : "#402c52",
+      lit: isNight ? "#333963" : "#6e4770",
+      frondDark: isNight ? "#121a30" : "#31244a",
+      frondMid: isNight ? "#1d314d" : "#4f375e",
+      frondLit: isNight ? "#35748c" : "#8f5578",
+    });
+  }
+}
+
+function stampBg1Street(sc, assets, isNight) {
+  const st = assets.streetImage;
+  const { r } = pixels(sc);
+  if (!st || !st.width) {
+    // Fallback matching bg1 palette while async PNG finishes loading
+    for (let x = 20; x < 2360; x += 220) {
+      r(x, 42, 160, 114, isNight ? "#28224a" : "#e8a8a4");
+      r(x + 10, 50, 140, 16, isNight ? "#42f2ff44" : "#ff66aa88");
+      r(x, 134, 160, 20, isNight ? "#383559" : "#d99ea8");
+    }
+    return;
+  }
+
+  const drawSegment = (srcX, srcW, dstX) => {
+    sc.drawImage(st, srcX, 0, srcW, st.height, dstX, 0, srcW, st.height);
+  };
+
+  // Block 1 (x = 16..616): Full authentic bg1.png panorama right at spawn!
+  drawSegment(0, 600, 16);
+
+  // Promenade Opening 1 (x = 616..828): reveals ultraFar sunset sea, far skyline & mid towers!
+  drawOceanPromenadeGap(pixels(sc), 616, 212, isNight);
+
+  // Block 2 (x = 828..1428): Re-ordered architectural collage of bg1 storefronts
+  drawSegment(365, 235, 828); // Vice CAFE + BLUE Moon + CLUB
+  drawSegment(0, 365, 1063);  // Ocean SEAFOOD + Bliss BAR + OCEAN VIEW
+
+  // Promenade Opening 2 (x = 1428..1648)
+  drawOceanPromenadeGap(pixels(sc), 1428, 220, isNight);
+
+  // Block 3 (x = 1648..2248): Full bg1 panorama + eastern promenade
+  drawSegment(0, 600, 1648);
+  drawOceanPromenadeGap(pixels(sc), 2248, 152, isNight);
+
+  if (isNight) {
+    // Subtle midnight indigo tint over sunlit facades while keeping neon signs vivid
+    sc.save();
+    sc.globalCompositeOperation = "multiply";
+    sc.fillStyle = "#7a78b8";
+    sc.fillRect(0, 0, 2400, 158);
+    sc.restore();
+  }
+}
+
+function buildSceneEntry(spec, assets = {}) {
+  const w = spec.width || 2400;
+  const isNight = spec.ambient === "neon";
+
+  // Layer 0: Ultra-Far Sky (640x160) + drifting Cloud Ribbon (640x96)
+  const ultraFar = document.createElement("canvas");
+  ultraFar.width = 640;
+  ultraFar.height = 160;
+  const ufc = ultraFar.getContext("2d");
+  const ufp = pixels(ufc);
+
+  if (spec.useBg1Layout && assets.skyImage) {
+    ufc.drawImage(assets.skyImage, 0, 0, 640, 148);
+    ufp.r(0, 148, 640, 12, "#2c305c");
+    if (isNight) {
+      ufc.fillStyle = "#0a0c2688";
+      ufc.fillRect(0, 0, 640, 160);
+    }
+  } else if (spec.ambient === "sunset" || spec.ambient === "neon") {
+    ditherSky(
+      ufc,
+      640,
+      128,
+      isNight
+        ? ["#09081a", "#141030", "#221647", "#361c5c", "#4d226e"]
+        : ["#2e235c", "#583578", "#a1477a", "#df737a", "#f5a57a"]
+    );
+    drawCumulusClouds(
+      ufp.r,
+      ufp.p,
+      isNight
+        ? { top: "#7056a8", mid: "#422c6b", base: "#20173d" }
+        : { top: "#ffdfb8", mid: "#f0927d", base: "#7a4475" }
+    );
+    ufp.r(0, 128, 640, 32, isNight ? "#162040" : "#3b3c6e");
+  } else if (spec.ambient === "harbor") {
+    ditherSky(ufc, 640, 118, ["#1c4266", "#2a638c", "#4289ab", "#72b0c2", "#b5d6d6"]);
+    drawCumulusClouds(ufp.r, ufp.p, { top: "#ffffff", mid: "#d2ebef", base: "#84a9ba" });
+    ufp.r(0, 118, 640, 42, "#1b5878");
+  } else {
+    ditherSky(ufc, 640, 118, ["#1b1e33", "#362c4a", "#664659", "#a3675b", "#d69463"]);
+    drawCumulusClouds(ufp.r, ufp.p, { top: "#ffd69c", mid: "#b87a6a", base: "#573d52" });
+    ufp.r(0, 118, 640, 42, "#243b3b");
+  }
+
+  const cloudRibbon = buildCloudRibbon(
+    isNight
+      ? { top: "#6e559c55", mid: "#47337055", base: "#281b4755" }
+      : spec.ambient === "harbor"
+        ? { top: "#ffffff66", mid: "#cde7f055", base: "#89afc244" }
+        : { top: "#ffdcc455", mid: "#f2968855", base: "#8b4d7844" }
+  );
+
+  // Layer 1: Far Skyline (640x160 transparent)
   const far = document.createElement("canvas");
   far.width = 640;
-  far.height = 118;
+  far.height = 160;
   const fc = far.getContext("2d");
   const fp = pixels(fc);
+  const beacons = [];
+  buildFarSkyline(fc, fp, spec.ambient, beacons);
 
-  // Layer 2: Midground bay / trees / causeway (640x118 transparent background)
+  // Layer 2: Midground Bay / Towers / Palms (720x160 transparent)
   const mid = document.createElement("canvas");
-  mid.width = 640;
-  mid.height = 118;
+  mid.width = 720;
+  mid.height = 160;
   const mc = mid.getContext("2d");
   const mp = pixels(mc);
+  buildMidLayer(mc, mp, spec.ambient);
 
-  // Layer 3: Main street canvas (w x 270, transparent sky above y=118 where no building sits!)
+  // Layer 3: Main Near Street (w x 270 transparent sky)
   const street = document.createElement("canvas");
   street.width = w;
   street.height = HEIGHT;
@@ -296,172 +501,53 @@ function buildProceduralScene(spec) {
   const sp = pixels(sc);
 
   const lampXs = [];
-  const fgPalms = [];
-  const beacons = [];
   const waterSparkles = [];
   const neonGlows = [];
 
-  if (spec.ambient === "sunset") {
-    ditherSky(fc, 640, 82, ["#241b52", "#582a6e", "#a13d6c", "#e06266", "#ff9b5e", "#ffd478"]);
-    drawCumulusClouds(fp.r, fp.p, { top: "#ffecc2", mid: "#f7a27e", base: "#8a4c7a" });
-    fp.r(478, 28, 32, 32, "#ffd970");
-    fp.r(482, 32, 24, 24, "#fff3b8");
-    fp.r(0, 78, 640, 40, "#1c5f78");
-    fp.r(0, 78, 640, 8, "#267c94");
-    fp.r(464, 79, 58, 3, "#ffbe73aa");
-    fp.r(474, 85, 38, 2, "#ff996eaa");
-    for (let i = 0; i < 14; i++) {
-      const bx = i * 48 + (i % 2) * 6;
-      const bh = 24 + ((i * 17) % 38);
-      fp.r(bx, 82 - bh, 26, bh, i % 2 ? "#422b5e" : "#54336b");
-      fp.r(bx + 26, 82 - bh, 6, bh, "#2d1d42");
-      fp.r(bx + 2, 82 - bh, 22, 2, "#ff87b2");
-      for (let wy = 86 - bh; wy < 78; wy += 6) {
-        fp.r(bx + 5, wy, 3, 2, (i + wy) % 4 === 0 ? "#ffe296" : "#6c4885");
-        fp.r(bx + 14, wy, 3, 2, "#6c4885");
-      }
-      if (bh > 46) beacons.push({ x: bx + 12, y: 80 - bh });
-    }
-
-    // Layer 2 Midground: distant causeway silhouette & palm ridge
-    for (let i = 0; i < 8; i++) {
-      drawCurvedPalm(mp.r, mp.p, 38 + i * 84, 86, 0.55, i % 2 ? 1 : -1, {
-        trunk: "#38284a",
-        lit: "#5e3d6b",
-        frondDark: "#2d2445",
-        frondMid: "#47355c",
-        frondLit: "#875375",
-      });
-    }
-
+  if (spec.useBg1Layout) {
     paintGTA6Boulevard(sc, w, {
-      sidewalk: "#d6c2ae",
-      sidewalkLine: "#b5a08c",
-      curb: "#917f6f",
-      asphalt: "#2d3242",
-      asphaltShade: "#242938",
-      asphaltSpeckA: "#3c435766",
-      asphaltSpeckB: "#1e223066",
-      bottomWalk: "#aa9683",
+      sidewalk: isNight ? "#524c75" : "#d69ca8",
+      sidewalkLine: isNight ? "#333052" : "#ad7483",
+      curb: isNight ? "#767ea3" : "#e8d6dc",
+      asphalt: isNight ? "#1c2038" : "#282e4d",
+      asphaltShade: isNight ? "#14162b" : "#1e223d",
+      asphaltSpeckA: "#3a426955",
+      asphaltSpeckB: "#15192e55",
+      bottomWalk: isNight ? "#2f3354" : "#3a4063",
+    }, {
+      topSwY: 134,
+      curbY: 154,
+      roadTop: 158,
+      roadH: 82,
+      roadImage: assets.roadImage || null,
+      isNight,
+      checkeredBottomCurb: true,
+      gutterNeon: isNight ? "#42f2ff55" : "#d94dff44",
     });
 
-    const layout = [
-      { kind: "deco", x: 36, w: 184, h: 80, wall: "#ffe0cc", shade: "#c99b8d", roofCol: "#fff1e0", trim: "#fff4e6", neon: "#ff5ca8", sign: "PALM DECO", awning: ["#ff6b9d", "#fff2e6"] },
-      { kind: "beach", x: 226, w: 174 },
-      { kind: "deco", x: 410, w: 190, h: 86, wall: "#c4f0e8", shade: "#7db3aa", roofCol: "#e6fff9", trim: "#f5fffc", neon: "#38f0d4", sign: "CORAL SUITES", awning: ["#32c7b4", "#fff5e6"] },
-      { kind: "beach", x: 606, w: 120 },
-      { kind: "deco", x: 734, w: 178, h: 76, wall: "#d4e2ff", shade: "#8ba1d1", roofCol: "#edf4ff", trim: "#ffffff", neon: "#4fe8ff", sign: "霓虹捷运站", awning: ["#3c88e0", "#e6f5ff"] },
-      { kind: "beach", x: 918, w: 184 },
-      { kind: "deco", x: 1110, w: 202, h: 84, wall: "#ffe8bd", shade: "#c9a871", roofCol: "#fff6e0", trim: "#fff9eb", neon: "#ff9b42", sign: "OCEAN DINER", awning: ["#e87b38", "#fff3db"] },
-      { kind: "beach", x: 1318, w: 164 },
-      { kind: "deco", x: 1490, w: 176, h: 78, wall: "#ffd4e8", shade: "#c48ea9", roofCol: "#ffebf4", trim: "#fff2f8", neon: "#ff52a8", sign: "TROPIC WAVE", awning: ["#e84c96", "#ffeaf4"] },
-      { kind: "deco", x: 1672, w: 166, h: 74, wall: "#c9efe2", shade: "#87b5a6", roofCol: "#ebfff8", trim: "#f5fffa", neon: "#42f2dc", sign: "海滨栈道", awning: ["#2fa899", "#e6fff8"] },
-      { kind: "beach", x: 1844, w: 208 },
-      { kind: "deco", x: 2060, w: 224, h: 86, wall: "#e3d6ff", shade: "#a391cc", roofCol: "#f4edff", trim: "#f8f5ff", neon: "#b87dff", sign: "SUNSET CLUB", awning: ["#8d5ce6", "#f2ebff"] },
-    ];
-    for (const item of layout) {
-      if (item.kind === "deco") {
-        drawVolumetricDecoBuilding(sc, sp.r, sp.p, item);
-        neonGlows.push({ x: item.x + item.w * 0.45, y: 162, w: item.w * 0.65, color: item.neon });
-      } else {
-        drawBeachGap(sp.r, sp.p, item.x, item.w, false);
-        waterSparkles.push({ x: item.x + 24, y: 80, w: item.w - 48 });
-      }
-    }
+    stampBg1Street(sc, assets, isNight);
 
-    for (let x = 140; x < w; x += 240) {
-      lampXs.push(x);
-      drawCurvedPalm(sp.r, sp.p, x + 78, 122, 1.05, x % 480 === 140 ? 1 : -1);
-      sp.p([[x + 78, 122], [x + 84, 122], [x + 62, 147], [x + 56, 147]], "#12162433");
-      fgPalms.push(x + 30);
+    // Register neon glow pools & street lamps matching bg1 signage positions
+    const bg1Blocks = [16, 1648];
+    for (const bx of bg1Blocks) {
+      neonGlows.push(
+        { x: bx + 68, y: 164, w: 72, color: "#ff9d5e" },  // Ocean SEAFOOD
+        { x: bx + 158, y: 164, w: 68, color: "#ff4fa8" }, // Bliss BAR
+        { x: bx + 275, y: 164, w: 96, color: "#58e8ff" }, // OCEANVIEW
+        { x: bx + 418, y: 164, w: 78, color: "#c46eff" }, // Vice CAFE
+        { x: bx + 498, y: 164, w: 72, color: "#42d8ff" }  // BLUE Moon
+      );
     }
-  } else if (spec.ambient === "neon") {
-    ditherSky(fc, 640, 118, ["#09081a", "#141030", "#221647", "#361c5c", "#4d226e"]);
-    for (let i = 0; i < 16; i++) {
-      const bx = i * 42;
-      const bh = 42 + ((i * 23) % 60);
-      fp.r(bx, 118 - bh, 32, bh, i % 2 ? "#151630" : "#1d1a3d");
-      fp.r(bx + 32, 118 - bh, 6, bh, "#0e0e22");
-      fp.r(bx + 2, 118 - bh, 30, 2, i % 2 ? "#42f2ff" : "#ff4fa8");
-      for (let wy = 124 - bh; wy < 110; wy += 6) {
-        fp.r(bx + 5, wy, 3, 2, (i + wy) % 3 === 0 ? "#4ef2ff" : "#ff5da8");
-        fp.r(bx + 15, wy, 3, 2, (i + wy) % 2 === 0 ? "#ffd96b" : "#28224f");
-      }
-      if (bh > 74) beacons.push({ x: bx + 16, y: 115 - bh });
-    }
-    // Midground neon bridge & skyline silhouettes
-    mp.r(0, 92, 640, 3, "#1f2547");
-    for (let x = 20; x < 640; x += 64) {
-      mp.r(x, 76, 3, 22, "#2a3059");
-      mp.r(x - 1, 75, 5, 2, "#42f2ff88");
-    }
-
-    paintGTA6Boulevard(sc, w, {
-      sidewalk: "#484d69",
-      sidewalkLine: "#2f334a",
-      curb: "#727899",
-      asphalt: "#1b1f2e",
-      asphaltShade: "#141724",
-      asphaltSpeckA: "#2d334a66",
-      asphaltSpeckB: "#11142066",
-      bottomWalk: "#353954",
-    });
-
-    const clubs = [
-      { x: 40, w: 192, h: 84, sign: "CLUB PULSE", neon: "#ff4fa8", wall: "#242240" },
-      { x: 350, w: 186, h: 80, sign: "NEON ARCADE", neon: "#42f2ff", wall: "#1e2742" },
-      { x: 630, w: 178, h: 76, sign: "海滨环线口", neon: "#42f2ff", wall: "#202b47" },
-      { x: 930, w: 198, h: 86, sign: "MIAMI LOUNGE", neon: "#ff72c0", wall: "#2b2042" },
-      { x: 1250, w: 192, h: 82, sign: "SYNTH AUTO", neon: "#ffd452", wall: "#24253d" },
-      { x: 1580, w: 184, h: 80, sign: "跨海高架口", neon: "#42f2ff", wall: "#1d2740" },
-      { x: 1920, w: 210, h: 88, sign: "STARLIGHT VIP", neon: "#c46eff", wall: "#261f45" },
-    ];
-    for (const cl of clubs) {
-      drawVolumetricDecoBuilding(sc, sp.r, sp.p, {
-        ...cl,
-        shade: "#121426",
-        roofCol: "#2d3254",
-        trim: "#5e688c",
-        darkMode: true,
-        awning: [cl.neon + "bb", "#1c2038"],
-      });
-      sp.r(cl.x + 28, 176 + (cl.x % 3) * 14, cl.w - 64, 5, cl.neon + "33");
-      sp.r(cl.x + 42, 178 + (cl.x % 3) * 14, cl.w - 92, 2, cl.neon + "66");
-      neonGlows.push({ x: cl.x + cl.w * 0.45, y: 170, w: cl.w * 0.7, color: cl.neon });
-    }
-    for (const gx of [238, 542, 814, 1134, 1448, 1770, 2138]) {
-      drawBeachGap(sp.r, sp.p, gx, 106, true);
-    }
-    for (let x = 130; x < w; x += 250) {
-      lampXs.push(x);
-      drawCurvedPalm(sp.r, sp.p, x + 95, 122, 0.95, 1, {
-        trunk: "#1a1f30",
-        lit: "#403c63",
-        frondDark: "#122438",
-        frondMid: "#1e425c",
-        frondLit: "#429eb5",
-      });
-      fgPalms.push(x + 45);
-    }
+    neonGlows.push(
+      { x: 905, y: 164, w: 78, color: "#c46eff" },
+      { x: 985, y: 164, w: 72, color: "#42d8ff" },
+      { x: 1130, y: 164, w: 72, color: "#ff9d5e" },
+      { x: 1220, y: 164, w: 68, color: "#ff4fa8" },
+      { x: 1338, y: 164, w: 96, color: "#58e8ff" }
+    );
+    for (let x = 130; x < w; x += 260) lampXs.push(x);
+    waterSparkles.push({ x: 640, y: 120, w: 160 }, { x: 1450, y: 120, w: 170 });
   } else if (spec.ambient === "harbor") {
-    ditherSky(fc, 640, 82, ["#1c4266", "#2a638c", "#4289ab", "#72b0c2", "#b5d6d6"]);
-    drawCumulusClouds(fp.r, fp.p, { top: "#ffffff", mid: "#d2ebef", base: "#84a9ba" });
-    fp.r(0, 80, 640, 38, "#1b5878");
-    fp.r(0, 80, 640, 5, "#338ba8");
-    for (let i = 0; i < 4; i++) {
-      const cx = 75 + i * 170;
-      fp.r(cx, 26, 4, 56, "#3b4f63");
-      fp.r(cx - 10, 26, 48, 4, "#526980");
-      fp.r(cx + 22, 30, 2, 22, "#243140");
-    }
-    fp.r(340, 62, 128, 22, "#263647");
-    fp.r(356, 48, 36, 14, "#405469");
-    // Midground harbor sailboats
-    for (let sx = 90; sx < 600; sx += 170) {
-      mp.r(sx, 88, 16, 4, "#d8e6f0");
-      mp.p([[sx + 8, 66], [sx + 8, 86], [sx + 16, 86]], "#f0f7fc");
-    }
-
     paintGTA6Boulevard(sc, w, {
       sidewalk: "#8b969e",
       sidewalkLine: "#667078",
@@ -488,7 +574,6 @@ function buildProceduralScene(spec) {
       sp.r(x, 111, 190, 7, "#82644a");
       sp.r(x, 110, 190, 1, "#18202c");
 
-      // Volumetric 3D-extruded shipping container & marina office
       const cx = x + 205;
       const col = ["#d1564b", "#3988ad", "#db9e3d"][i % 3];
       const shade = ["#943830", "#265f7a", "#9e6e22"][i % 3];
@@ -506,24 +591,6 @@ function buildProceduralScene(spec) {
       sp.r(x + 2, 244, 6, 4, "#222933");
     }
   } else {
-    ditherSky(fc, 640, 86, ["#1b1e33", "#362c4a", "#664659", "#a3675b", "#d69463"]);
-    drawCumulusClouds(fp.r, fp.p, { top: "#ffd69c", mid: "#b87a6a", base: "#573d52" });
-    fp.r(0, 86, 640, 32, "#243b3b");
-    for (let i = 0; i < 20; i++) {
-      const tx = i * 32;
-      fp.r(tx + 10, 50 + (i % 3) * 8, 5, 48, "#1b2924");
-      fp.p([[tx, 60], [tx + 12, 38], [tx + 25, 60]], "#243d31");
-    }
-    for (let i = 0; i < 10; i++) {
-      drawCurvedPalm(mp.r, mp.p, 35 + i * 64, 98, 0.65, 1, {
-        trunk: "#222620",
-        lit: "#3e4034",
-        frondDark: "#192b21",
-        frondMid: "#243d2d",
-        frondLit: "#3a5c3c",
-      });
-    }
-
     paintGTA6Boulevard(sc, w, {
       sidewalk: "#6e6958",
       sidewalkLine: "#524d3f",
@@ -538,8 +605,7 @@ function buildProceduralScene(spec) {
     for (let i = 0; i < 8; i++) {
       const bx = 48 + i * 290;
       if (i % 2 === 0) {
-        sp.r(bx, 84, 210, 34, "#234240");
-        sp.r(bx, 90, 210, 2, "#42736b");
+        drawBeachGap(sp.r, sp.p, bx, 210, false, 118);
         waterSparkles.push({ x: bx + 20, y: 88, w: 170 });
         drawCurvedPalm(sp.r, sp.p, bx + 45, 118, 0.95, 1, {
           trunk: "#282a26",
@@ -548,15 +614,7 @@ function buildProceduralScene(spec) {
           frondMid: "#2b4f39",
           frondLit: "#4d784e",
         });
-        drawCurvedPalm(sp.r, sp.p, bx + 150, 118, 0.85, -1, {
-          trunk: "#282a26",
-          lit: "#4f4a3c",
-          frondDark: "#1b3326",
-          frondMid: "#2b4f39",
-          frondLit: "#4d784e",
-        });
       } else {
-        // Volumetric extruded roadside motel
         sp.p([[bx + 2, 48], [bx + 14, 40], [bx + 186, 40], [bx + 172, 48]], "#8f6e56");
         sp.p([[bx + 172, 48], [bx + 186, 40], [bx + 186, 118], [bx + 172, 118]], "#3d3028");
         sp.r(bx, 48, 172, 70, "#192029");
@@ -567,39 +625,67 @@ function buildProceduralScene(spec) {
         neonGlows.push({ x: bx + 85, y: 160, w: 110, color: "#ff9e5e" });
       }
       lampXs.push(bx + 220);
-      fgPalms.push(bx + 90);
     }
   }
 
-  for (const lx of lampXs) {
-    sp.r(lx, 54, 3, 66, "#171d29");
-    sp.r(lx + 1, 56, 1, 62, "#65748c");
-    sp.r(lx - 4, 52, 12, 3, "#263042");
-    sp.r(lx - 2, 55, 8, 2, "#ffe494");
-  }
-
-  return { far, mid, street, lampXs, fgPalms, beacons, waterSparkles, neonGlows, width: w, custom: false };
+  return {
+    ultraFar,
+    cloudRibbon,
+    far,
+    mid,
+    street,
+    lampXs,
+    fgItems: buildFgItems(w, spec.ambient),
+    beacons,
+    waterSparkles,
+    neonGlows,
+    width: w,
+    custom: false,
+    opaqueCustom: false,
+  };
 }
 
 export class SceneManager {
   constructor(onCustomReady = null) {
     this.cache = new Map();
+    this.bg1Assets = { skyImage: null, streetImage: null, roadImage: null };
+
     for (const spec of SCENE_SPECS) {
-      this.cache.set(spec.id, buildProceduralScene(spec));
-      if (spec.bgImage && typeof Image !== "undefined") {
-        const img = new Image();
-        img.onload = () => {
-          const res = this.setCustomBackground(spec.id, img, "bg");
-          if (res && onCustomReady) onCustomReady(spec.id, res);
-        };
-        img.src = spec.bgImage;
-      }
-      if (spec.farImage && typeof Image !== "undefined") {
-        const farImg = new Image();
-        farImg.onload = () => this.setCustomBackground(spec.id, farImg, "far");
-        farImg.src = spec.farImage;
-      }
+      this.cache.set(spec.id, buildSceneEntry(spec, this.bg1Assets));
     }
+
+    if (typeof Image !== "undefined") {
+      this._loadBg1Assets(onCustomReady);
+    }
+  }
+
+  _loadBg1Assets(onReady) {
+    const firstBg1Spec = SCENE_SPECS.find((s) => s.useBg1Layout);
+    if (!firstBg1Spec) return;
+
+    const rebuildAllBg1 = () => {
+      for (const spec of SCENE_SPECS) {
+        if (!spec.useBg1Layout) continue;
+        const prev = this.cache.get(spec.id);
+        if (prev?.custom) continue;
+        this.cache.set(spec.id, buildSceneEntry(spec, this.bg1Assets));
+        if (onReady) onReady(spec.id, { width: spec.width, height: HEIGHT });
+      }
+    };
+
+    const loadImg = (src, key) => {
+      if (!src) return;
+      const img = new Image();
+      img.onload = () => {
+        this.bg1Assets[key] = img;
+        rebuildAllBg1();
+      };
+      img.src = src;
+    };
+
+    loadImg(firstBg1Spec.skyImage, "skyImage");
+    loadImg(firstBg1Spec.streetImage, "streetImage");
+    loadImg(firstBg1Spec.roadImage, "roadImage");
   }
 
   get(sceneId) {
@@ -614,7 +700,7 @@ export class SceneManager {
     if (layer === "far") {
       const fc = document.createElement("canvas");
       fc.width = 640;
-      fc.height = 118;
+      fc.height = 160;
       const ctx = fc.getContext("2d");
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(image, 0, 0, fc.width, fc.height);
@@ -634,9 +720,25 @@ export class SceneManager {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(image, 0, 0, targetW, HEIGHT);
 
+    // Detect if uploaded PNG has transparent sky so ultraFar/far/mid parallax stays visible
+    let hasTransparentSky = false;
+    try {
+      const sample = ctx.getImageData(0, 0, Math.min(64, targetW), 16).data;
+      for (let i = 3; i < sample.length; i += 4) {
+        if (sample[i] < 200) {
+          hasTransparentSky = true;
+          break;
+        }
+      }
+    } catch {
+      hasTransparentSky = false;
+    }
+
     entry.street = sc;
     entry.width = targetW;
     entry.custom = true;
+    entry.opaqueCustom = !hasTransparentSky;
+    entry.fgItems = buildFgItems(targetW, spec.ambient);
     spec.width = targetW;
     return { width: targetW, height: HEIGHT };
   }
@@ -645,57 +747,65 @@ export class SceneManager {
     const spec = SCENE_BY_ID[sceneId];
     if (!spec) return;
     spec.width = 2400;
-    this.cache.set(sceneId, buildProceduralScene(spec));
+    this.cache.set(sceneId, buildSceneEntry(spec, this.bg1Assets));
   }
 
-  draw(ctx, sceneId, cameraX, time) {
+  draw(ctx, sceneId, cameraX, cameraY = 0, time = 0, opts = {}) {
     const entry = this.get(sceneId);
     const spec = SCENE_BY_ID[sceneId];
+    const strength = opts.parallaxStrength ?? 1;
+
     ctx.fillStyle = "#101624";
-    ctx.fillRect(0, 0, 480, HEIGHT);
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-    if (!entry.custom) {
-      const farShift = Math.round(cameraX * 0.2) % 320;
-      ctx.drawImage(entry.far, -farShift, 0);
-      if (640 - farShift < 480) ctx.drawImage(entry.far, 640 - farShift, 0);
+    if (!entry.opaqueCustom) {
+      // Layer 0: Ultra-far sky & distant sea (0.06x) + drifting cloud ribbon
+      const uf = computeParallaxOffset(cameraX, cameraY, PARALLAX_LAYERS.ultraFar.x, PARALLAX_LAYERS.ultraFar.y, strength);
+      drawTiledLayer(ctx, entry.ultraFar, uf.x, -uf.y * 0.4);
+      drawTiledLayer(ctx, entry.cloudRibbon, uf.x + time * 2.4, -uf.y * 0.4);
 
-      // Layer 2 midground parallax
-      const midShift = Math.round(cameraX * 0.45) % 320;
-      ctx.drawImage(entry.mid, -midShift, 0);
-      if (640 - midShift < 480) ctx.drawImage(entry.mid, 640 - midShift, 0);
+      // Layer 1: Far city skyline (0.20x) + blinking aviation beacons
+      const farOff = computeParallaxOffset(cameraX, cameraY, PARALLAX_LAYERS.far.x, PARALLAX_LAYERS.far.y, strength);
+      drawTiledLayer(ctx, entry.far, farOff.x, -farOff.y * 0.55);
 
-      if (Math.floor(time * 2) % 2 === 0) {
+      if (Math.floor(time * 2) % 2 === 0 && entry.beacons.length) {
         ctx.fillStyle = "#ff4e78";
+        const farMod = Math.round(wrapMod(farOff.x, entry.far.width));
         for (const b of entry.beacons) {
-          const bx = b.x - farShift;
-          if (bx >= 0 && bx < 480) ctx.fillRect(bx, b.y, 2, 2);
+          let bx = b.x - farMod;
+          if (bx < 0) bx += entry.far.width;
+          if (bx >= 0 && bx < WIDTH) ctx.fillRect(bx, Math.round(b.y - farOff.y * 0.55), 2, 2);
         }
       }
+
+      // Layer 2: Midground secondary buildings & palms (0.48x)
+      const midOff = computeParallaxOffset(cameraX, cameraY, PARALLAX_LAYERS.mid.x, PARALLAX_LAYERS.mid.y, strength);
+      drawTiledLayer(ctx, entry.mid, midOff.x, -midOff.y * 0.75);
     }
 
-    ctx.drawImage(entry.street, -Math.round(cameraX), 0);
+    // Layer 3: Near Main Street (1.00x)
+    ctx.drawImage(entry.street, -Math.round(cameraX), -Math.round(cameraY));
 
     if (!entry.custom) {
       ctx.fillStyle = spec?.ambient === "bayou" ? "#ffd88a88" : "#d9ffff99";
       for (const ws of entry.waterSparkles) {
         const sx = ws.x - cameraX;
-        if (sx + ws.w < 0 || sx > 480) continue;
+        if (sx + ws.w < 0 || sx > WIDTH) continue;
         for (let k = 0; k < 4; k++) {
           const px = sx + ((Math.floor(time * 3 + k * 37) * 29 + k * 19) % Math.max(12, ws.w));
-          const py = ws.y + ((k * 3) % 9);
+          const py = ws.y + ((k * 3) % 9) - Math.round(cameraY);
           ctx.fillRect(Math.round(px), py, 4, 1);
         }
       }
 
-      // Soft neon pools on asphalt beneath signs
       for (const ng of entry.neonGlows) {
         const sx = ng.x - cameraX;
-        if (sx < -120 || sx > 600) continue;
+        if (sx < -120 || sx > WIDTH + 120) continue;
         ctx.save();
-        ctx.globalAlpha = 0.08 + 0.02 * Math.sin(time * 2.5 + ng.x);
+        ctx.globalAlpha = (spec?.ambient === "neon" ? 0.14 : 0.09) + 0.025 * Math.sin(time * 2.5 + ng.x);
         ctx.fillStyle = ng.color;
         ctx.beginPath();
-        ctx.ellipse(sx, ng.y, ng.w * 0.5, 16, 0, 0, Math.PI * 2);
+        ctx.ellipse(sx, ng.y - cameraY, ng.w * 0.5, 12, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -703,15 +813,15 @@ export class SceneManager {
       const lampColor = spec?.ambient === "neon" ? "#4ff2ff" : "#ffd682";
       for (const wx of entry.lampXs) {
         const sx = wx - cameraX;
-        if (sx < -60 || sx > 540) continue;
+        if (sx < -60 || sx > WIDTH + 60) continue;
         ctx.save();
-        ctx.globalAlpha = 0.08 + 0.02 * Math.sin(time * 3 + wx);
+        ctx.globalAlpha = 0.06 + 0.018 * Math.sin(time * 3 + wx);
         ctx.fillStyle = lampColor;
         ctx.beginPath();
-        ctx.moveTo(sx - 4, 57);
-        ctx.lineTo(sx + 6, 57);
-        ctx.lineTo(sx + 38, 146);
-        ctx.lineTo(sx - 34, 146);
+        ctx.moveTo(sx - 4, 72 - cameraY);
+        ctx.lineTo(sx + 6, 72 - cameraY);
+        ctx.lineTo(sx + 34, 154 - cameraY);
+        ctx.lineTo(sx - 30, 154 - cameraY);
         ctx.closePath();
         ctx.fill();
         ctx.restore();
@@ -719,16 +829,91 @@ export class SceneManager {
     }
   }
 
-  drawForeground(ctx, sceneId, cameraX) {
+  drawForeground(ctx, sceneId, cameraX, cameraY = 0, time = 0, opts = {}) {
+    if (opts.foregroundOcclusion === false) return;
     const entry = this.get(sceneId);
-    if (entry.custom) return;
+    const spec = SCENE_BY_ID[sceneId];
+    const strength = opts.parallaxStrength ?? 1;
+    const playerScreenX = opts.playerScreenX ?? WIDTH * 0.5;
+    const isNight = spec?.ambient === "neon";
+
+    const silDark = "#0b0d1f";
+    const silMid = "#151936";
+    const rimCol = isNight ? "#48f2ff" : "#e8688c";
+    const leafCol = isNight ? "#102438" : "#15232b";
+
     const { r, p } = pixels(ctx);
-    const fgShift = cameraX * 1.16;
-    for (const wx of entry.fgPalms) {
-      const sx = wx * 1.16 - fgShift;
-      if (sx < -30 || sx > 510) continue;
-      r(sx, 250, 4, 20, "#0b141c");
-      p([[sx - 8, 250], [sx - 14, 240], [sx - 2, 244], [sx + 3, 236], [sx + 8, 244], [sx + 16, 240], [sx + 10, 250]], "#102129");
+
+    for (const item of entry.fgItems) {
+      const off = computeParallaxOffset(cameraX, cameraY, item.factor, 1.15, strength);
+      const sx = Math.round(item.x * (1 + (item.factor - 1) * strength) - off.x);
+      if (sx < -44 || sx > WIDTH + 44) continue;
+
+      const nearPlayer = Math.abs(sx - playerScreenX) < 26;
+      const baseAlpha = item.kind === "shrub" || item.kind === "bollard" ? 0.96 : nearPlayer ? 0.42 : 0.9;
+
+      ctx.save();
+      ctx.globalAlpha = baseAlpha;
+      const yShift = Math.round(-off.y * 0.85);
+
+      if (item.kind === "palm") {
+        // Tall foreground palm trunk silhouette along bottom curb/edge
+        const sway = Math.round(Math.sin(time * 1.4 + item.x * 0.03) * 1.5);
+        const topX = sx + item.lean * 10 + sway;
+        const baseY = HEIGHT + 8 + yShift;
+        const topY = 124 + yShift;
+        p(
+          [
+            [sx - 4, baseY],
+            [sx + 3, baseY],
+            [topX + 2, topY],
+            [topX - 2, topY],
+          ],
+          silDark
+        );
+        // Rim highlight on sunlit edge
+        p(
+          [
+            [sx + 2, baseY],
+            [sx + 3, baseY],
+            [topX + 2, topY],
+            [topX + 1, topY],
+          ],
+          rimCol + "66"
+        );
+        // Canopy fronds framing top of viewport
+        const fronds = [
+          [-26, 6],
+          [-18, -10],
+          [0, -14],
+          [18, -10],
+          [26, 6],
+        ];
+        for (const [dx, dy] of fronds) {
+          p([[topX, topY], [topX + Math.round(dx * 0.5), topY + dy - 4], [topX + dx, topY + dy + 5], [topX + Math.round(dx * 0.45), topY + 2]], leafCol);
+          r(topX + Math.round(dx * 0.4), topY + dy - 3, 4, 1, rimCol + "88");
+        }
+      } else if (item.kind === "lamp") {
+        // Foreground Art Deco boulevard lamp post passing across camera
+        const ly = HEIGHT + 4 + yShift;
+        r(sx - 2, 102 + yShift, 4, ly - (102 + yShift), silDark);
+        r(sx + 1, 104 + yShift, 1, ly - (104 + yShift), rimCol + "55");
+        r(sx - 7, 98 + yShift, 14, 4, silMid);
+        r(sx - 4, 102 + yShift, 8, 3, isNight ? "#58f5ff" : "#ffd684");
+      } else if (item.kind === "shrub") {
+        // Low close-foreground tropical fern cluster along bottom screen edge (y=252..270)
+        const by = HEIGHT + yShift;
+        p([[sx - 18, by], [sx - 12, by - 13], [sx - 2, by - 9], [sx + 4, by - 16], [sx + 13, by - 10], [sx + 20, by]], silDark);
+        r(sx - 6, by - 11, 5, 1, rimCol + "66");
+        r(sx + 3, by - 15, 6, 1, rimCol + "66");
+      } else {
+        // Art Deco concrete bollard / parking meter silhouette
+        const by = HEIGHT + yShift;
+        r(sx - 3, by - 17, 6, 17, silDark);
+        r(sx - 4, by - 19, 8, 3, silMid);
+        r(sx - 2, by - 18, 4, 1, rimCol + "88");
+      }
+      ctx.restore();
     }
   }
 }

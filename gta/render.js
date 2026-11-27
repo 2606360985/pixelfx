@@ -4,6 +4,7 @@ import { WIDTH, HEIGHT } from "./data.js";
 import { FX_BY_ID } from "./fx-catalog.js";
 import { dressProtagonist, dressPedestrian, drawVehicle, drawProp } from "./art.js";
 import { SceneManager } from "./scenes.js";
+import { CinematicCamera } from "./camera.js";
 import { clamp } from "./world.js";
 
 const INK = "#101824";
@@ -88,10 +89,14 @@ export class Renderer {
     canvas.height = HEIGHT;
 
     this.scenes = new SceneManager();
+    this.cam = new CinematicCamera();
     this.camera = 0;
-    this.aimLead = 0;
-    this.zoom = 1.1;
-    this.zoomPunch = 0;
+    this.cameraY = 0;
+    this.foregroundOcclusion = true;
+    this.parallaxStrength = 1.0;
+    this.lastActiveIdx = 0;
+    this.lastHeroX = 240;
+    this.lastTickTime = 0;
     this.chromaTimer = 0;
     this.postProcess = true;
 
@@ -122,16 +127,6 @@ export class Renderer {
     this.bloomCanvas.height = 68;
     this.bloomCtx = this.bloomCanvas.getContext("2d");
 
-    this.blurSmall = document.createElement("canvas");
-    this.blurSmall.width = 96;
-    this.blurSmall.height = 54;
-    this.blurSmallCtx = this.blurSmall.getContext("2d");
-
-    this.blurCanvas = document.createElement("canvas");
-    this.blurCanvas.width = 160;
-    this.blurCanvas.height = 90;
-    this.blurCtx = this.blurCanvas.getContext("2d");
-
     this.frame = createFrame(WIDTH, HEIGHT);
     this.img = new ImageData(WIDTH, HEIGHT);
     this.fxCanvas = document.createElement("canvas");
@@ -160,17 +155,14 @@ export class Renderer {
     this.labels = [];
     this.bits = [];
     this.decals = [];
+    this.cam.reset(0);
     this.camera = 0;
-    this.zoom = 1.1;
-    this.zoomPunch = 0;
+    this.cameraY = 0;
     this.chromaTimer = 0;
   }
 
   screenToWorld(sx, sy) {
-    const z = this.zoom || 1;
-    const wx = PIVOT_X + (sx - PIVOT_X) / z;
-    const wy = PIVOT_Y + (sy - PIVOT_Y) / z;
-    return { x: this.camera + wx, y: wy };
+    return this.cam.screenToWorld(sx, sy, PIVOT_X, PIVOT_Y);
   }
 
   text(c, s, x, y, color = "#fff2d1", size = 8, align = "left") {
@@ -237,15 +229,16 @@ export class Renderer {
         this.labels.push({ text: msg, x: e.x, y: e.y - 16, life: 0.9, color: e.kind === "cash" ? "#7dffb3" : "#7eeaff" });
       } else if (e.type === "explosion" || e.type === "impactPulse") {
         this.particles(e.x, e.y - 8, 28, "#ff9d4d");
-        this.zoomPunch = Math.max(this.zoomPunch, 0.038);
+        this.cam.addZoomPunch(0.032);
         this.chromaTimer = Math.max(this.chromaTimer, 0.13);
       } else if (e.type === "decal") {
         this.addDecal(e.kind, e.x, e.y, e.radius);
       } else if (e.type === "land") {
         this.particles(e.x, e.y, 6, "#d9c6ab");
+        this.cam.triggerLandBounce(3.2);
       } else if (e.type === "ramp") {
         this.labels.push({ text: "AIRTIME!", x: e.x, y: e.y - 34, life: 1.0, color: "#42f2dc" });
-        this.zoomPunch = Math.max(this.zoomPunch, 0.025);
+        this.cam.addZoomPunch(-0.015);
       } else if (e.type === "chemistry") {
         this.labels.push({ text: e.text, x: e.x, y: e.y - 32, life: 1.2, color: "#68f2ff" });
         this.chromaTimer = Math.max(this.chromaTimer, 0.11);
@@ -257,7 +250,7 @@ export class Renderer {
 
   tick(dt, world) {
     this.elapsed += dt;
-    this.zoomPunch = Math.max(0, this.zoomPunch - dt * 0.25);
+    this.lastTickTime = dt;
     this.chromaTimer = Math.max(0, this.chromaTimer - dt);
 
     for (const f of this.fx) {
@@ -423,14 +416,15 @@ export class Renderer {
   drawActor(c, a, world) {
     if (!a.hero && a.hp <= 0 && Math.floor(a.deathAge * 14) % 2) return;
     const x = Math.round(a.x - this.camera);
-    const y = Math.round(a.y - a.z);
+    const y = Math.round(a.y - a.z - this.cameraY);
+    const groundY = Math.round(a.y - this.cameraY);
     if (x < -40 || x > WIDTH + 40) return;
 
     c.save();
     c.globalAlpha = 0.45;
     c.fillStyle = "#0a101b";
     c.beginPath();
-    c.ellipse(x, a.y + 1, a.hero ? 10 : 8, 3, 0, 0, Math.PI * 2);
+    c.ellipse(x, groundY + 1, a.hero ? 10 : 8, 3, 0, 0, Math.PI * 2);
     c.fill();
     c.restore();
 
@@ -439,7 +433,7 @@ export class Renderer {
       c.strokeStyle = "#4ff2dc";
       c.lineWidth = 1;
       c.beginPath();
-      c.ellipse(x, a.y + 1, 12, 4, 0, 0, Math.PI * 2);
+      c.ellipse(x, groundY + 1, 12, 4, 0, 0, Math.PI * 2);
       c.stroke();
       c.restore();
     }
@@ -487,7 +481,7 @@ export class Renderer {
 
   drawVehicleEntity(c, v, world) {
     const vx = Math.round(v.x - this.camera);
-    const vy = Math.round(v.y - v.z);
+    const vy = Math.round(v.y - v.z - this.cameraY);
     if (vx < -80 || vx > WIDTH + 80) return;
 
     c.save();
@@ -522,7 +516,7 @@ export class Renderer {
 
     for (const fx of this.fx) {
       fx.inst.options.x = fx.x - this.camera;
-      fx.inst.options.y = fx.y;
+      fx.inst.options.y = fx.y - this.cameraY;
       fx.inst.draw(f, layer);
     }
 
@@ -531,14 +525,14 @@ export class Renderer {
         const ped = world.peds.find((p) => p.id === pedId);
         if (!ped || ped.hp <= 0) continue;
         entry.inst.options.x = ped.x - this.camera;
-        entry.inst.options.y = ped.y - ped.z;
+        entry.inst.options.y = ped.y - ped.z - this.cameraY;
         entry.inst.draw(f, "front");
       }
       for (const cr of world.critters) {
         const entry = this.critterFx.get(cr.id);
         if (!entry) continue;
         entry.inst.options.x = cr.x - this.camera;
-        entry.inst.options.y = cr.y - cr.z;
+        entry.inst.options.y = cr.y - cr.z - this.cameraY;
         entry.inst.options.flip = cr.face < 0;
         entry.inst.draw(f, "front");
       }
@@ -546,7 +540,7 @@ export class Renderer {
         const entry = this.pickupFx.get(pk.id);
         if (!entry) continue;
         entry.inst.options.x = pk.x - this.camera;
-        entry.inst.options.y = pk.y - pk.z;
+        entry.inst.options.y = pk.y - pk.z - this.cameraY;
         entry.inst.draw(f, "front");
       }
     }
@@ -574,41 +568,37 @@ export class Renderer {
     const out = this.ctx;
     const sc = world.scene;
 
-    // 1. Additive Neon Bloom Pass
+    // 1. Lightweight Neon Bloom Pass (no tilt-shift or blur over gameplay)
     this.bloomCtx.clearRect(0, 0, 120, 68);
     this.bloomCtx.imageSmoothingEnabled = true;
     this.bloomCtx.drawImage(this.canvas, 0, 0, 120, 68);
 
     out.save();
     out.globalCompositeOperation = "lighter";
-    out.globalAlpha = sc.ambient === "neon" ? 0.2 : 0.14;
+    out.globalAlpha = sc.ambient === "neon" ? 0.16 : 0.11;
     out.imageSmoothingEnabled = true;
     out.drawImage(this.bloomCanvas, 0, 0, WIDTH, HEIGHT);
     out.restore();
 
-    // 2. Tilt-Shift Miniature Micro-Lens (bokeh on extreme top sky & bottom margin, razor-sharp street)
-    this.blurSmallCtx.imageSmoothingEnabled = true;
-    this.blurSmallCtx.drawImage(this.canvas, 0, 0, 96, 54);
-    this.blurCtx.imageSmoothingEnabled = true;
-    this.blurCtx.drawImage(this.blurSmall, 0, 0, 160, 90);
-
-    out.save();
-    out.beginPath();
-    out.rect(0, 0, WIDTH, 34);
-    out.clip();
-    out.globalAlpha = 0.65;
-    out.imageSmoothingEnabled = true;
-    out.drawImage(this.blurCanvas, 0, 0, WIDTH, HEIGHT);
-    out.restore();
-
-    out.save();
-    out.beginPath();
-    out.rect(0, 242, WIDTH, 28);
-    out.clip();
-    out.globalAlpha = 0.62;
-    out.imageSmoothingEnabled = true;
-    out.drawImage(this.blurCanvas, 0, 0, WIDTH, HEIGHT);
-    out.restore();
+    // 2. High-Speed Motion Lines when driving fast or boosting nitro
+    const pl = world.player;
+    const veh = pl.vehicleId ? world.vehicles.find((v) => v.id === pl.vehicleId && !v.exploded) : null;
+    const speed = veh ? Math.abs(veh.vx) : 0;
+    if (veh && (speed > 155 || veh.nitroActive)) {
+      const intensity = clamp((speed - 140) / 140, 0.2, 1.0);
+      out.save();
+      out.globalAlpha = 0.22 * intensity;
+      out.fillStyle = veh.nitroActive ? "#62f4ff" : "#ffe6c8";
+      const tPhase = Math.floor(this.elapsed * 26);
+      for (let i = 0; i < 8; i++) {
+        const y = 34 + ((i * 29 + tPhase * 17) % (HEIGHT - 68));
+        const len = 14 + ((i * 13 + tPhase * 7) % 24);
+        const sideRight = (i + tPhase) % 2 === 0;
+        const x = sideRight ? WIDTH - len - ((tPhase * 11 + i * 7) % 18) : ((tPhase * 11 + i * 7) % 18);
+        out.fillRect(x, y, len, 1);
+      }
+      out.restore();
+    }
 
     // 3. Impact Chromatic Split on heavy explosions / chemistry surges
     if (this.chromaTimer > 0) {
@@ -620,57 +610,64 @@ export class Renderer {
       out.restore();
     }
 
-    // 4. Subtle miniature lens vignette
-    const grad = out.createRadialGradient(WIDTH / 2, HEIGHT * 0.52, WIDTH * 0.28, WIDTH / 2, HEIGHT * 0.52, WIDTH * 0.68);
+    // 4. Subtle widescreen edge vignette + brief whip-pan / overdrive letterbox pulse (max 4px)
+    const grad = out.createRadialGradient(WIDTH / 2, HEIGHT * 0.5, WIDTH * 0.34, WIDTH / 2, HEIGHT * 0.5, WIDTH * 0.72);
     grad.addColorStop(0, "rgba(0,0,0,0)");
-    grad.addColorStop(1, "rgba(8,10,20,0.28)");
+    grad.addColorStop(1, "rgba(8,10,20,0.18)");
     out.fillStyle = grad;
     out.fillRect(0, 0, WIDTH, HEIGHT);
+
+    const barH = this.cam.whipTimer > 0 ? Math.ceil((this.cam.whipTimer / 0.28) * 4) : 0;
+    if (barH > 0) {
+      out.fillStyle = "#080a14";
+      out.fillRect(0, 0, WIDTH, barH);
+      out.fillRect(0, HEIGHT - barH, WIDTH, barH);
+    }
   }
 
   render(world, aimScreen = { x: 240, y: 160 }) {
     const sc = world.scene;
     const pl = world.player;
-    const veh = pl.vehicleId ? world.vehicles.find((v) => v.id === pl.vehicleId) : null;
 
-    let targetZoom = 1.11;
-    if (veh && !veh.exploded) {
-      const spd = Math.abs(veh.vx);
-      targetZoom = veh.nitroActive || veh.z > 4 || spd > 145 ? 1.0 : 1.03;
+    if (this.lastActiveIdx !== world.activeIdx) {
+      this.cam.triggerHeroSwitch(this.lastHeroX, pl.x);
+      this.lastActiveIdx = world.activeIdx;
     }
-    targetZoom += this.zoomPunch;
-    this.zoom += (targetZoom - this.zoom) * 0.1;
+    this.lastHeroX = pl.x;
 
-    const leadTarget = ((aimScreen.x - WIDTH * 0.5) / (WIDTH * 0.5)) * 18;
-    this.aimLead += (leadTarget - this.aimLead) * 0.08;
-    const targetCam = clamp(pl.x - WIDTH * 0.44 + this.aimLead, 0, Math.max(0, sc.width - WIDTH));
-    this.camera += (targetCam - this.camera) * 0.16;
+    this.cam.update(this.lastTickTime || 1 / 60, world, aimScreen);
+
+    // Parallax-aware camera shake (never exposes black borders even at zoom 1.0)
+    const shakeX = world.shake > 0.2 ? Math.sin(this.elapsed * 92) * world.shake : 0;
+    const shakeY = world.shake > 0.2 ? Math.cos(this.elapsed * 67) * world.shake * 0.6 : 0;
+
+    this.camera = this.cam.x + shakeX;
+    this.cameraY = this.cam.y + shakeY;
 
     const c = this.sCtx;
     c.imageSmoothingEnabled = false;
     c.save();
 
-    if (world.shake > 0.2) {
-      c.translate(Math.round(Math.sin(this.elapsed * 92) * world.shake), Math.round(Math.cos(this.elapsed * 67) * world.shake * 0.6));
-    }
-
-    this.scenes.draw(c, world.sceneId, this.camera, this.elapsed);
+    this.scenes.draw(c, world.sceneId, this.camera, this.cameraY, this.elapsed, {
+      parallaxStrength: this.parallaxStrength,
+    });
 
     // Persistent road decals
     for (const d of this.decals) {
       const dx = Math.round(d.x - this.camera);
+      const dy = Math.round(d.y - this.cameraY);
       if (dx < -50 || dx > WIDTH + 50) continue;
       c.save();
       c.globalAlpha = Math.min(0.65, (d.life / d.maxLife) * 0.65);
       if (d.kind === "scorch") {
         c.fillStyle = "#141016";
         c.beginPath();
-        c.ellipse(dx, d.y, d.radius, Math.max(4, d.radius * 0.35), 0, 0, Math.PI * 2);
+        c.ellipse(dx, dy, d.radius, Math.max(4, d.radius * 0.35), 0, 0, Math.PI * 2);
         c.fill();
       } else {
         c.fillStyle = "#181c26";
-        c.fillRect(dx - 4, d.y - 1, 8, 2);
-        c.fillRect(dx - 4, d.y + 3, 8, 2);
+        c.fillRect(dx - 4, dy - 1, 8, 2);
+        c.fillRect(dx - 4, dy + 3, 8, 2);
       }
       c.restore();
     }
@@ -678,12 +675,13 @@ export class Renderer {
     // Elemental ground zones
     for (const z of world.zones) {
       const zx = Math.round(z.x - this.camera);
+      const zy = Math.round(z.y - this.cameraY);
       if (zx < -90 || zx > WIDTH + 90) continue;
       c.save();
       c.globalAlpha = Math.min(0.55, (z.life / z.maxLife) * 0.7);
       c.fillStyle = z.kind === "ice" ? "#a6f4ff" : "#228fa8";
       c.beginPath();
-      c.ellipse(zx, z.y, z.radius * 0.85, z.radius * 0.28, 0, 0, Math.PI * 2);
+      c.ellipse(zx, zy, z.radius * 0.85, z.radius * 0.28, 0, 0, Math.PI * 2);
       c.fill();
       c.strokeStyle = z.kind === "ice" ? "#ffffff" : "#6cf0ff";
       c.lineWidth = 1;
@@ -693,11 +691,12 @@ export class Renderer {
 
     for (const d of sc.doors) {
       const dx = Math.round(d.x - this.camera);
+      const dy = Math.round(d.y - this.cameraY);
       if (dx < -40 || dx > WIDTH + 40) continue;
       c.fillStyle = "#38e0c488";
-      c.fillRect(dx - 14, d.y - 4, 28, 3);
+      c.fillRect(dx - 14, dy - 4, 28, 3);
       if (Math.hypot(pl.x - d.x, pl.y - d.y) < 55) {
-        this.text(c, `[E] ${d.label}`, dx, d.y - 12, "#8cfff0", 7, "center");
+        this.text(c, `[E] ${d.label}`, dx, dy - 12, "#8cfff0", 7, "center");
       }
     }
 
@@ -713,7 +712,7 @@ export class Renderer {
         y: prop.y,
         draw: () => {
           c.save();
-          c.translate(px, Math.round(prop.y - prop.z));
+          c.translate(px, Math.round(prop.y - prop.z - this.cameraY));
           drawProp(c, prop, world.time);
           c.restore();
         },
@@ -732,7 +731,7 @@ export class Renderer {
 
     for (const pr of world.projectiles) {
       const px = Math.round(pr.x - this.camera);
-      const py = Math.round(pr.y - pr.z);
+      const py = Math.round(pr.y - pr.z - this.cameraY);
       c.save();
       c.translate(px, py);
       c.rotate(pr.angle || 0);
@@ -747,9 +746,15 @@ export class Renderer {
 
     for (const b of this.bits) {
       c.fillStyle = b.color;
-      c.fillRect(Math.round(b.x - this.camera), Math.round(b.y), 2, 2);
+      c.fillRect(Math.round(b.x - this.camera), Math.round(b.y - this.cameraY), 2, 2);
     }
-    this.scenes.drawForeground(c, world.sceneId, this.camera);
+
+    const playerScreenX = pl.x - this.camera;
+    this.scenes.drawForeground(c, world.sceneId, this.camera, this.cameraY, this.elapsed, {
+      parallaxStrength: this.parallaxStrength,
+      foregroundOcclusion: this.foregroundOcclusion,
+      playerScreenX,
+    });
 
     c.restore();
 
@@ -757,19 +762,20 @@ export class Renderer {
 
     for (const b of world.bubbles) {
       const bx = Math.round(b.x - this.camera);
+      const by = Math.round(b.y - this.cameraY);
       if (bx < -40 || bx > WIDTH + 40) continue;
       const w = Math.min(180, b.text.length * 7 + 14);
       c.fillStyle = "#0e1524dd";
-      c.fillRect(bx - w / 2, b.y - 12, w, 13);
+      c.fillRect(bx - w / 2, by - 12, w, 13);
       c.fillStyle = b.color;
-      c.fillRect(bx - w / 2, b.y - 12, 2, 13);
-      this.text(c, b.text, bx, b.y - 3, b.color, 7, "center");
+      c.fillRect(bx - w / 2, by - 12, 2, 13);
+      this.text(c, b.text, bx, by - 3, b.color, 7, "center");
     }
 
     for (const l of this.labels) {
       c.save();
       c.globalAlpha = Math.min(1, l.life * 3);
-      this.text(c, l.text, l.x - this.camera, l.y, l.color, 8, "center");
+      this.text(c, l.text, l.x - this.camera, l.y - this.cameraY, l.color, 8, "center");
       c.restore();
     }
 
@@ -777,11 +783,11 @@ export class Renderer {
       const nearVeh = world.vehicles.find((v) => !v.exploded && Math.hypot(v.x - pl.x, (v.y - pl.y) * 1.4) < 52);
       if (nearVeh) {
         const vx = Math.round(nearVeh.x - this.camera);
-        this.text(c, `[F] ${nearVeh.driver ? "抢车" : "驾驶"} ${nearVeh.spec.shortName}`, vx, nearVeh.y - 30, "#7effea", 7, "center");
+        this.text(c, `[F] ${nearVeh.driver ? "抢车" : "驾驶"} ${nearVeh.spec.shortName}`, vx, nearVeh.y - 30 - this.cameraY, "#7effea", 7, "center");
       } else {
         const nearPed = world.peds.find((ped) => ped.hp > 0 && !ped.vehicleId && Math.hypot(ped.x - pl.x, ped.y - pl.y) < 52);
         if (nearPed) {
-          this.text(c, `[E] ${nearPed.isVendor ? "购买/补给" : "交谈"}`, Math.round(nearPed.x - this.camera), nearPed.y - 45, "#ffe494", 7, "center");
+          this.text(c, `[E] ${nearPed.isVendor ? "购买/补给" : "交谈"}`, Math.round(nearPed.x - this.camera), nearPed.y - 45 - this.cameraY, "#ffe494", 7, "center");
         }
       }
     }
@@ -798,7 +804,7 @@ export class Renderer {
     out.imageSmoothingEnabled = false;
     out.save();
     out.translate(PIVOT_X, PIVOT_Y);
-    out.scale(this.zoom, this.zoom);
+    out.scale(this.cam.zoom, this.cam.zoom);
     out.drawImage(this.sceneCanvas, -PIVOT_X, -PIVOT_Y);
     out.restore();
 
