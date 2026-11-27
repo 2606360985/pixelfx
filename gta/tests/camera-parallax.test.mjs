@@ -74,8 +74,15 @@ test("bg1-backed scenes declare valid bg1 layers and non-overlapping street band
     assert.equal(sc.useBg1Layout, true);
     assert.ok(sc.bgImage.endsWith("bg1.png"));
     assert.ok(sc.skyImage.endsWith("bg1_sky.png"));
+    assert.ok(sc.farImage.endsWith("bg1_far.png"));
+    assert.ok(sc.midImage.endsWith("bg1_mid.png"));
     assert.ok(sc.streetImage.endsWith("bg1_street.png"));
+    assert.ok(sc.promenadeImage.endsWith("bg1_promenade.png"));
     assert.ok(sc.roadImage.endsWith("bg1_road.png"));
+    assert.ok(sc.fgSprites?.palm.endsWith("fg_palm.png"));
+    assert.ok(sc.fgSprites?.lamp.endsWith("fg_lamp.png"));
+    assert.ok(sc.fgSprites?.planter.endsWith("fg_planter.png"));
+    assert.ok(sc.fgSprites?.parasol.endsWith("fg_parasol.png"));
     assert.ok(sc.sidewalkTop[0] < sc.sidewalkTop[1]);
     assert.ok(sc.sidewalkTop[1] < sc.roadLanes[0]);
     assert.ok(sc.roadLanes[0] < sc.roadLanes[1]);

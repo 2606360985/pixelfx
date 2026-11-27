@@ -750,10 +750,12 @@ export class Renderer {
     }
 
     const playerScreenX = pl.x - this.camera;
+    const playerScreenY = pl.y - this.cameraY;
     this.scenes.drawForeground(c, world.sceneId, this.camera, this.cameraY, this.elapsed, {
       parallaxStrength: this.parallaxStrength,
       foregroundOcclusion: this.foregroundOcclusion,
       playerScreenX,
+      playerScreenY,
     });
 
     c.restore();
